@@ -1,11 +1,7 @@
 import type { History } from './history';
-import * as machineUtils from './machine-utils';
 import * as extensionApi from '@podman-desktop/api';
 import * as os from 'node:os';
 import { resolve } from 'node:path';
-
-// create a struct from
-// ): Promise<{ selectedType: string; selectedFolder: string; imagePath: string } | undefined> {
 
 export interface BootcBuildOptionSelection {
   type: string;
@@ -15,15 +11,6 @@ export interface BootcBuildOptionSelection {
 }
 
 export async function bootcBuildOptionSelection(history: History): Promise<BootcBuildOptionSelection | undefined> {
-  if (!machineUtils.isLinux()) {
-    const isRootful = await machineUtils.isPodmanMachineRootful();
-    if (!isRootful) {
-      await extensionApi.window.showErrorMessage(
-        'The podman machine is not set as rootful. Please recreate the podman machine with rootful privileges set and try again.',
-      );
-      return;
-    }
-  }
 
   const selection = await extensionApi.window.showQuickPick(
     [
@@ -57,7 +44,7 @@ export async function bootcBuildOptionSelection(history: History): Promise<Bootc
   }
   const selectedArch = selectionArch.arch;
 
-  const location = history.getLastLocation() || os.homedir();
+  const location = history.getLastFolder() || os.homedir();
   const selectedFolder = await extensionApi.window.showInputBox({
     prompt: 'Select the folder to generate disk ' + selectedType + ' into',
     value: location,

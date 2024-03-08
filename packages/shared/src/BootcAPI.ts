@@ -16,12 +16,17 @@
  * SPDX-License-Identifier: Apache-2.0
  l***********************************************************************/
 
-import type { BootcBuildOptions } from './models/build';
+import type { BootcBuildInfo } from './models/bootc';
 import type { ImageInfo } from '@podman-desktop/api';
 
 export abstract class BootcApi {
   abstract ping(): Promise<string>;
   abstract selectOutputFolder(): Promise<string>;
-  abstract buildImage(build: BootcBuildOptions): Promise<void>;
+  abstract buildImage(build: BootcBuildInfo): Promise<void>;
   abstract listBootcImages(): Promise<ImageInfo[]>;
+  abstract listHistoryInfo(): Promise<BootcBuildInfo[]>;
+  abstract deleteBuild(build: BootcBuildInfo): Promise<void>;
+  abstract navigateToContainerLogs(imageId: string): Promise<void>;
+  abstract getBuildLog(folder: string): Promise<string>;
+  abstract deleteAll(): Promise<void>;
 }
