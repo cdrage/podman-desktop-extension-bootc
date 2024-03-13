@@ -1,5 +1,5 @@
 /**********************************************************************
- * Copyright (C) 2024 Red Hat, Inc.
+ * Copyright (C) 2023 Red Hat, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,16 +16,11 @@
  * SPDX-License-Identifier: Apache-2.0
  ***********************************************************************/
 
-export interface BootcBuildInfo {
-  name: string;
-  tag: string;
-  engineId: string;
-  type: string;
-  folder: string;
-  arch: string;
-  status?: BootcBuildStatus;
-  timestamp?: string;
-  buildContainerId?: string; // The image ID that is used to build the image
-}
+import type { Writable } from 'svelte/store';
+import { writable } from 'svelte/store';
+import type { TinroBreadcrumb } from 'tinro';
 
-export type BootcBuildStatus = 'running' | 'creating' | 'success' | 'error' | 'lost' | 'deleting';
+const home = { name: 'Dashboard', path: '/' } as TinroBreadcrumb;
+export const currentPage: Writable<TinroBreadcrumb> = writable(home);
+export const lastPage: Writable<TinroBreadcrumb> = writable(home);
+export const history: Writable<TinroBreadcrumb[]> = writable([home]);
