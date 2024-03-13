@@ -21,6 +21,7 @@ import { screen, render } from '@testing-library/svelte';
 import Build from './Build.svelte';
 import type { BootcBuildInfo } from '@shared/src/models/bootc';
 import type { ImageInfo } from '@podman-desktop/api';
+import { bootcClient } from './api/client';
 
 const mockHistoryInfo: BootcBuildInfo[] = [
   {
@@ -75,18 +76,11 @@ const mockBootcImages: ImageInfo[] = [
   },
 ];
 
-const mocks = vi.hoisted(() => {
-  return {
-    listHistoryInfo: vi.fn(),
-    listBootcImages: vi.fn(),
-  };
-});
-
 vi.mock('./api/client', async () => {
   return {
     bootcClient: {
-      listHistoryInfo: mocks.listHistoryInfo,
-      listBootcImages: mocks.listBootcImages,
+      listHistoryInfo: vi.fn(),
+      listBootcImages: vi.fn(),
     },
     rpcBrowser: {
       subscribe: () => {
@@ -107,8 +101,8 @@ async function waitRender(customProperties: object): Promise<void> {
 }
 
 test('Render shows correct images and history', async () => {
-  mocks.listHistoryInfo.mockResolvedValue(mockHistoryInfo);
-  mocks.listBootcImages.mockResolvedValue(mockBootcImages);
+  vi.mocked(bootcClient.listHistoryInfo).mockResolvedValue(mockHistoryInfo);
+  vi.mocked(bootcClient.listBootcImages).mockResolvedValue(mockBootcImages);
   await waitRender(Build);
 
   // Wait until children length is 2 meaning it's fully rendered / propagated the changes
