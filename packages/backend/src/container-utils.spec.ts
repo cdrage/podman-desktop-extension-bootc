@@ -27,6 +27,7 @@ import {
   removeContainerAndVolumes,
   deleteOldImages,
   inspectImage,
+  inspectManifest,
 } from './container-utils';
 
 const mocks = vi.hoisted(() => ({
@@ -225,4 +226,42 @@ test('test running inspectImage', async () => {
   // Test that it'll call getImageInspect (returns i1)
   const result = await inspectImage(image.engineId, image.Id);
   expect(result.Id).toBe('i1');
+});
+
+test('test running inspectManifest', async () => {
+  const image = { engineId: 'podman', Id: 'i1' };
+  const inspectManifestMock = vi.fn().mockResolvedValue({
+    engineId: 'podman1',
+    engineName: 'podman',
+    manifests: [
+      {
+        digest: 'digest',
+        mediaType: 'mediaType',
+        platform: {
+          architecture: 'architecture',
+          features: [],
+          os: 'os',
+          osFeatures: [],
+          osVersion: 'osVersion',
+          variant: 'variant',
+        },
+        size: 100,
+        urls: ['url1', 'url2'],
+      },
+    ],
+    mediaType: 'mediaType',
+    schemaVersion: 1,
+  });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (extensionApi.containerEngine as any).manifestInspect = inspectManifestMock;
+
+  // Test that it'll call getManifestInspect (returns i1)
+  const result = await inspectManifest(image.engineId, image.Id);
+
+  // Check the results are as expected
+  expect(result).toBeDefined();
+  expect(result.engineId).toBe('podman1');
+  expect(result.engineName).toBe('podman');
+  expect(result.manifests).toBeDefined();
+
 });
