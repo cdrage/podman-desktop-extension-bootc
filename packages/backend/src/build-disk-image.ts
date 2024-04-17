@@ -118,6 +118,53 @@ export async function buildDiskImage(build: BootcBuildInfo, history: History, ov
           fs.unlinkSync(logPath);
         }
 
+        // ADD MANIFEST FIX HERE?
+        // if manifest, we have to find the image that matches the type added?
+        // Also have to add "workaround" here too.
+
+        // BELOW IS COPY AND PASTED FROM OTHER SECTION
+
+  // Is the image a manifest? If so.. we need to figure out which image to use that matches the architecture selected
+  // this is because bootc-image-builder does NOT support manifests and we must only pass in a single image.
+  if (image && image.isManifest) {
+    // Get all the images that are in the manifest (returns ImageInfo)
+
+    // NOTE: Always Linux for now, as we only support Linux, and this is a good placeholder for any future OS support.
+    const matchingImage = await bootcClient.getMatchingPlatformImageFromManifest(image, {
+      os: 'linux',
+      arch: buildArch || '',
+    });
+    console.log('Matching image:', matchingImage);
+
+    if (!matchingImage) {
+      buildErrorMessage = 'Could not find a matching image within the manifest for the selected architecture';
+      return;
+    }
+
+    // !!!!
+    // WORKAROUND
+    // !!!!
+    // bootc-image-builder (bib)does NOT support manifests, so we must pass in a single image
+    // however, bib also does not support passing in a blank image name / tag, so we must pass in a valid image name / tag
+    // this will create ANOTHER tag for the image that will appear.. but it's a workaround for now.
+    // this is a VERY hacky solution that permanently renames that <none> image to something new
+    let workaroundTag = `${buildImageTag}.linux.${buildArch}`;
+    console.log(`We are tagging the image to a new name to workaround the bib issue, the new name for ${matchingImage.Id} will be: ${buildImageName}:${workaroundTag}`);
+    try {
+      await bootcClient.tagImage(matchingImage, buildImageName, workaroundTag);
+    } catch (error) {
+      buildErrorMessage = String(error);
+      return;
+    }
+
+    // If we were able to successfully tag the image, let's update the image variable to the new image name / tag
+    buildImageTag = workaroundTag;
+
+
+    // TODO: MAKE SURE WE REVERT **BACK** to <none> tag after to match how it was before!
+  }
+
+
         // Preliminary Step 0. Create the "bootc-image-builder" container
         // options that we will use to build the image. This will help with debugging
         // as well as making sure we delete the previous build, etc.

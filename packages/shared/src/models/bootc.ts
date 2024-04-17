@@ -29,6 +29,12 @@ export interface BootcBuildInfo {
   status?: BootcBuildStatus;
   timestamp?: string;
   buildContainerId?: string; // The image ID that is used to build the image
+  isManifest?: boolean;
 }
 
 export type BootcBuildStatus = 'running' | 'creating' | 'success' | 'error' | 'lost' | 'deleting';
+
+export interface BootcPlatformInfo {
+  os: string;
+  arch: string;
+}

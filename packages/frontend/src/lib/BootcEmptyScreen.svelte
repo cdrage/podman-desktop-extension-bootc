@@ -60,7 +60,12 @@ onMount(async () => {
 
 // Each time bootcAvailableImages updates, check if 'quay.io/bootc-extension/httpd' is in RepoTags
 $: {
-  if (bootcAvailableImages && bootcAvailableImages.some(image => image.RepoTags.includes(exampleImage))) {
+  // Some images returned (ex. manifests), will have no RepoTags, so make sure that we have RepoTags before checking
+  // so we don't get an error with includes.
+  if (
+    bootcAvailableImages &&
+    bootcAvailableImages.some(image => image.RepoTags && image.RepoTags.includes(exampleImage))
+  ) {
     imageExists = true;
   }
 }

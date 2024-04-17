@@ -16,7 +16,7 @@
  * SPDX-License-Identifier: Apache-2.0
  l***********************************************************************/
 
-import type { BootcBuildInfo, BuildType } from './models/bootc';
+import type { BootcBuildInfo, BootcPlatformInfo, BuildType } from './models/bootc';
 import type { ImageInfo, ImageInspectInfo, ManifestInspectInfo } from '@podman-desktop/api';
 
 export abstract class BootcApi {
@@ -26,6 +26,12 @@ export abstract class BootcApi {
   abstract pullImage(image: string): Promise<void>;
   abstract inspectImage(image: ImageInfo): Promise<ImageInspectInfo>;
   abstract inspectManifest(image: ImageInfo): Promise<ManifestInspectInfo>;
+  // Temp needed for now (remove in future?) to get manifest support
+  abstract tagImage(image: ImageInfo, name: string, tag: string): Promise<void>; 
+  abstract getMatchingPlatformImageFromManifest(
+    manifest: ImageInfo,
+    platform: BootcPlatformInfo,
+  ): Promise<ImageInfo | undefined>;
   abstract deleteBuilds(builds: BootcBuildInfo[]): Promise<void>;
   abstract selectOutputFolder(): Promise<string>;
   abstract listBootcImages(): Promise<ImageInfo[]>;

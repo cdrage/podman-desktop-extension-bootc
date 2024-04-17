@@ -4,13 +4,14 @@ import { faCube, faQuestionCircle, faRocket, faTriangleExclamation } from '@fort
 import { bootcClient } from './api/client';
 import FormPage from './lib/upstream/FormPage.svelte';
 import Button from './lib/upstream/Button.svelte';
-import type { BootcBuildInfo, BuildType } from '/@shared/src/models/bootc';
+import type { BootcBuildInfo, BuildType, BootcPlatformInfo } from '/@shared/src/models/bootc';
 import Fa from 'svelte-fa';
 import { onMount } from 'svelte';
 import type { ImageInfo } from '@podman-desktop/api';
 import { Input } from '@podman-desktop/ui-svelte';
 import EmptyScreen from './lib/upstream/EmptyScreen.svelte';
 import { router } from 'tinro';
+import { table } from 'node:console';
 
 export let imageName: string | undefined = undefined;
 export let imageTag: string | undefined = undefined;
@@ -24,6 +25,9 @@ let buildFolder: string;
 let buildType: BuildType[];
 let buildArch: string | undefined;
 let overwrite: boolean = false;
+
+// Array of available architectures / strings$a
+let availablePlatforms: BootcPlatformInfo[];
 
 // Other variable
 let success = false;
@@ -116,21 +120,26 @@ async function buildBootcImage() {
     return;
   }
 
+  // Find the image and retrieve the necessary information (ImageInfo)
+  // needed for building.
+  const image = findImage(selectedImage);
+
   // Before building a disk image name, we get a unique unused identifier for this image
   // This is to prevent the user from accidentally overwriting an history
   const buildImageName = selectedImage.split(':')[0];
+  let buildImageTag = selectedImage.split(':')[1];
   const buildID = await bootcClient.generateUniqueBuildID(buildImageName);
 
-  // The build options
-  const image = findImage(selectedImage);
+
   const buildOptions: BootcBuildInfo = {
     id: buildID,
     image: buildImageName,
-    tag: selectedImage.split(':')[1],
+    tag: buildImageTag,
     engineId: image?.engineId ?? '',
     folder: buildFolder,
     type: buildType,
     arch: buildArch,
+    isManifest: image?.isManifest ?? false,
   };
 
   buildInProgress = true;
@@ -187,6 +196,7 @@ function cleanup() {
 
 onMount(async () => {
   const imageInfos = await bootcClient.listBootcImages();
+  console.log('List of available bootc-labelled images:', imageInfos);
 
   // filter to images that have a repo tag here, to avoid doing it everywhere
   bootcAvailableImages = imageInfos.filter(image => image.RepoTags && image.RepoTags.length > 0);
@@ -200,6 +210,56 @@ onMount(async () => {
 // validate every time a selection changes in the form
 $: if (selectedImage || buildFolder || buildType || buildArch || overwrite) {
   validate();
+}
+
+// Each time an image is selected / propagated, we will perform either an image inspect in order to get the architecture
+$: if (selectedImage) {
+  // Do this async so we don't block the UI
+  (async () => {
+    handleImageSelection(selectedImage);
+  })();
+}
+
+// Async function to handle image selection and inspection
+async function handleImageSelection(selectedImage: string) {
+  if (!selectedImage) return;
+
+  // Clear all previous platforms before updating
+  availablePlatforms = [];
+
+  const image = findImage(selectedImage);
+  console.log('Found image:', image);
+  if (!image) return;
+
+  try {
+    await inspectAndUpdatePlatforms(image);
+  } catch (error) {
+    console.error('Error inspecting image:', error);
+  }
+}
+
+// Consolidated function to inspect image and update platforms based on type
+async function inspectAndUpdatePlatforms(image: ImageInfo) {
+  const inspectResult = image.isManifest
+    ? await bootcClient.inspectManifest(image)
+    : await bootcClient.inspectImage(image);
+
+  console.log('Inspect output:', inspectResult);
+
+  if (image.isManifest) {
+    if (inspectResult.manifests) {
+      availablePlatforms = inspectResult.manifests
+        .filter((manifest: { platform: string }) => manifest.platform)
+        .map((manifest: { platform: { os: string; architecture: string } }) => ({
+          os: manifest.platform.os,
+          arch: manifest.platform.architecture,
+        }));
+    }
+  } else {
+    if (inspectResult.Architecture && inspectResult.Os) {
+      availablePlatforms = [{ os: inspectResult.Os, arch: inspectResult.Architecture }];
+    }
+  }
 }
 </script>
 
@@ -268,6 +328,14 @@ $: if (selectedImage || buildFolder || buildType || buildArch || overwrite) {
                 <Fa class="absolute left-0 top-0 ml-2 mt-3 text-gray-500" size="1x" icon="{faQuestionCircle}" />
               {/if}
             </div>
+            {#if availablePlatforms && availablePlatforms.length > 0}
+              <p class="text-gray-300 text-xs pt-1">
+                Detected platforms of the selected image is:
+                {#each availablePlatforms as platform}
+                  <span class="pr-1">{platform.os}/{platform.arch}</span>
+                {/each}
+              </p>
+            {/if}
             {#if bootcAvailableImages.length === 0}
               <p class="text-amber-500 text-sm pt-1">
                 No bootable container compatible images found. Learn to create one on our <a
@@ -435,7 +503,7 @@ $: if (selectedImage || buildFolder || buildType || buildArch || overwrite) {
           </label>
         {/if}
         {#if errorFormValidation}
-          <div aria-label="validation" class="bg-red-800 p-3 rounded-md text-white text-sm">{errorFormValidation}</div>
+          <div aria-label="validation" class="bg-red-600 p-3 rounded-md text-white text-sm">{errorFormValidation}</div>
         {/if}
         {#if buildInProgress}
           <Button class="w-full" disabled="{true}">Creating build task</Button>

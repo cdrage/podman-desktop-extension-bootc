@@ -19,13 +19,14 @@
 import * as podmanDesktopApi from '@podman-desktop/api';
 import type { ImageInfo } from '@podman-desktop/api';
 import type { BootcApi } from '/@shared/src/BootcAPI';
-import type { BootcBuildInfo, BuildType } from '/@shared/src/models/bootc';
+import type { BootcBuildInfo, BootcPlatformInfo, BuildType } from '/@shared/src/models/bootc';
 import { buildDiskImage, buildExists } from './build-disk-image';
 import { History } from './history';
 import * as containerUtils from './container-utils';
 import { Messages } from '/@shared/src/messages/Messages';
 import { telemetryLogger } from './extension';
 import { checkPrereqs } from './machine-utils';
+import { a } from 'vitest/dist/suite-ynYMzeLu';
 
 export class BootcApiImpl implements BootcApi {
   private history: History;
@@ -98,19 +99,80 @@ export class BootcApiImpl implements BootcApi {
   }
 
   async listBootcImages(): Promise<ImageInfo[]> {
-    let images: ImageInfo[] = [];
+    let imagesToReturn: ImageInfo[] = [];
+
     try {
-      const retrieveImages = await podmanDesktopApi.containerEngine.listImages();
-      images = retrieveImages.filter(image => {
-        if (image.Labels) {
-          return image.Labels['bootc'] ?? image.Labels['containers.bootc'];
+      const retrievedImages = await podmanDesktopApi.containerEngine.listImages();
+
+      for (const image of retrievedImages) {
+        // If the image is not a manifest, check if it has the label 'bootc' or 'containers.bootc', we know to add it.
+        if (!image.isManifest && image.Labels) {
+          if (image.Labels['bootc'] ?? image.Labels['containers.bootc']) {
+            imagesToReturn.push(image);
+          }
         }
-      });
+
+        // If the image IS a manifest, and we need to check the images from within the manifest
+        // if *any* of those images have the label 'bootc' or 'containers.bootc', we know to add the manifest
+        if (image.isManifest) {
+          // First, we will have to retrieve all the ImageInfo for each image in the manifest
+          const imagesInManifest = await containerUtils.getImagesFromManifest(image);
+
+          console.log('We got these images in the manifest:', imagesInManifest);
+
+          // Then, we will check each image in the manifest to see if it has the label 'bootc' or 'containers.bootc', if we find one
+          // we will add the manifest specifically to the list.
+          for (const imageWithinManifest of imagesInManifest) {
+            if (imageWithinManifest.Labels) {
+              if (imageWithinManifest.Labels['bootc'] ?? imageWithinManifest.Labels['containers.bootc']) {
+                // Push the "manifest" image to list of images to return
+                console.log('Pushing image to images:', image);
+                imagesToReturn.push(image);
+                break; // Only push manifest once if there is at least one image in the manifest with the label, don't push any further.
+              }
+            }
+          }
+        }
+      }
     } catch (err) {
       await podmanDesktopApi.window.showErrorMessage(`Error listing images: ${err}`);
       console.error('Error listing images: ', err);
     }
-    return images;
+    console.log('Images which will be returned:', imagesToReturn);
+    return imagesToReturn;
+  }
+
+  async getMatchingPlatformImageFromManifest(
+    manifest: ImageInfo,
+    platform: BootcPlatformInfo,
+  ): Promise<ImageInfo | undefined> {
+    let imagesInManifest: ImageInfo[] = [];
+
+    try {
+      imagesInManifest = await containerUtils.getImagesFromManifest(manifest);
+    } catch (err) {
+      throw new Error(`Error getting images from manifest: ${err}`);
+    }
+
+    // If we have images in the manifest, we will check each one to see if it matches the platform (OS and Arch)
+    // in order to actually get the Archiecture and OS, we must inspect each image.
+    for (const image of imagesInManifest) {
+      let imageInspect: podmanDesktopApi.ImageInspectInfo;
+      try {
+        imageInspect = await podmanDesktopApi.containerEngine.getImageInspect(image.engineId, image.Id);
+      } catch (err) {
+        throw new Error(`Error inspecting image: ${err}`);
+      }
+
+      // Check if the image matches the platform
+      if (imageInspect?.Architecture === platform.arch && imageInspect?.Os === platform.os) {
+        console.log('Found matching image for platform:', platform, 'Image:', image);
+        return image;
+      }
+    }
+    // If we're unable to find any images that match the platform, return undefined.
+    console.log('No matching image found for platform:', platform);
+    return undefined;
   }
 
   async inspectImage(image: ImageInfo): Promise<podmanDesktopApi.ImageInspectInfo> {
@@ -126,6 +188,17 @@ export class BootcApiImpl implements BootcApi {
     return imageInspect;
   }
 
+  // Will "tag" the image with a new name, this is needed to get manifests temporarily working until 
+  // bib supports passing in just the container id rather than with the name as well.
+  async tagImage(image: ImageInfo, name: string, tag: string): Promise<void> {
+    try {
+      await podmanDesktopApi.containerEngine.tagImage(image.engineId, image.Id, name, tag);
+    } catch (err) {
+      throw new Error(`Error tagging image: ${err}`);
+    }
+  }
+
+
   // We pass in imageInfo because when we do listImages, it also lists manifests, and we can use imageInfo to get the manifest
   // name and engineId required.
   async inspectManifest(image: ImageInfo): Promise<podmanDesktopApi.ManifestInspectInfo> {
@@ -140,7 +213,6 @@ export class BootcApiImpl implements BootcApi {
     }
     return manifestInspect;
   }
-
 
   async listHistoryInfo(): Promise<BootcBuildInfo[]> {
     try {

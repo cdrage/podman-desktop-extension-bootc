@@ -263,5 +263,4 @@ test('test running inspectManifest', async () => {
   expect(result.engineId).toBe('podman1');
   expect(result.engineName).toBe('podman');
   expect(result.manifests).toBeDefined();
-
 });
