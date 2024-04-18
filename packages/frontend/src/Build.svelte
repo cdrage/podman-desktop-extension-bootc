@@ -189,7 +189,8 @@ onMount(async () => {
   const imageInfos = await bootcClient.listBootcImages();
 
   // filter to images that have a repo tag here, to avoid doing it everywhere
-  bootcAvailableImages = imageInfos.filter(image => image.RepoTags && image.RepoTags.length > 0);
+  // bootcAvailableImages = imageInfos.filter(image => image.RepoTags && image.RepoTags.length > 0);
+  bootcAvailableImages = imageInfos;
 
   // Fills the build options with the last options
   await fillBuildOptions();

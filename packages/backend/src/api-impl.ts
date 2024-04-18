@@ -102,6 +102,7 @@ export class BootcApiImpl implements BootcApi {
     try {
       const retrieveImages = await podmanDesktopApi.containerEngine.listImages();
       images = retrieveImages.filter(image => {
+        return true;
         if (image.Labels) {
           return image.Labels['bootc'] ?? image.Labels['containers.bootc'];
         }

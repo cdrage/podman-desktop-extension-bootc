@@ -18,4 +18,5 @@
 
 // Image related
 export const bootcImageBuilderContainerName = '-bootc-image-builder';
-export const bootcImageBuilderName = 'quay.io/centos-bootc/bootc-image-builder:latest-1712917745';
+//export const bootcImageBuilderName = 'quay.io/centos-bootc/bootc-image-builder:latest-1712917745';
+export const bootcImageBuilderName = 'quay.io/bootc-extension/test-arm64-bib-image:latest';
