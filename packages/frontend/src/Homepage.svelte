@@ -77,6 +77,12 @@ let typeColumn = new Column<BootcBuildInfo, string>('Type', {
   comparator: (a, b) => a.type.join().localeCompare(b.type.join()),
 });
 
+let timeToBuildColumn = new Column<BootcBuildInfo, number>('Build', {
+  renderMapping: object => object.timeToBuild ?? 0,
+  renderer: SimpleColumn,
+  comparator: (a, b) => (a.timeToBuild ?? 0) - (b.timeToBuild ?? 0),
+});
+
 let archColumn = new Column<BootcBuildInfo, string>('Arch', {
   renderMapping: object => object.arch ?? '',
   renderer: SimpleColumn,
@@ -95,12 +101,13 @@ let folderColumn = new Column<BootcBuildInfo>('Folder', {
   comparator: (a, b) => a.folder.localeCompare(b.folder),
 });
 
-const columns: Column<BootcBuildInfo, BootcBuildInfo | string>[] = [
+const columns: Column<BootcBuildInfo, BootcBuildInfo | string | number>[] = [
   statusColumn,
   imageColumn,
   typeColumn,
   archColumn,
   folderColumn,
+  timeToBuildColumn,
   new Column<BootcBuildInfo>('Actions', { align: 'right', renderer: BootcColumnActions, overflow: true }),
 ];
 

@@ -100,6 +100,10 @@ export async function buildDiskImage(build: BootcBuildInfo, history: History, ov
     .withProgress(
       { location: extensionApi.ProgressLocation.TASK_WIDGET, title: `Building disk image ${build.image}` },
       async progress => {
+
+        // Get the current time
+        const startTime = new Date();
+
         const buildContainerName = build.image.split('/').pop() + bootcImageBuilderContainerName;
         let successful: boolean = false;
         let logData: string = 'Build Image Log --------\n';
@@ -229,6 +233,8 @@ export async function buildDiskImage(build: BootcBuildInfo, history: History, ov
         try {
           // Update the image build status
           build.status = successful ? 'success' : 'error';
+          // Store the time it took to build the image in seconds
+          build.timeToBuild = (new Date().getTime() - startTime.getTime()) / 1000;
           await history.addOrUpdateBuildInfo(build);
         } catch (e) {
           // If for any reason there is an error.. (example, unable to write to history file)
