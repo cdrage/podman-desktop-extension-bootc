@@ -98,12 +98,19 @@ let folderColumn = new TableColumn<BootcBuildInfo>('Folder', {
   comparator: (a, b) => a.folder.localeCompare(b.folder),
 });
 
-const columns: TableColumn<BootcBuildInfo, BootcBuildInfo | string>[] = [
+let timeToBuildColumn = new TableColumn<BootcBuildInfo, number>('Build', {
+  renderMapping: object => object.timeToBuild ?? 0,
+  renderer: TableSimpleColumn,
+  comparator: (a, b) => (a.timeToBuild ?? 0) - (b.timeToBuild ?? 0),
+});
+
+const columns: TableColumn<BootcBuildInfo, BootcBuildInfo | string | number>[] = [
   statusColumn,
   imageColumn,
   typeColumn,
   archColumn,
   folderColumn,
+  timeToBuildColumn,
   new TableColumn<BootcBuildInfo>('Actions', { align: 'right', renderer: BootcColumnActions, overflow: true }),
 ];
 

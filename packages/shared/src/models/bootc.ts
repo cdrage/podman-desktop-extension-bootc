@@ -30,6 +30,7 @@ export interface BootcBuildInfo {
   status?: BootcBuildStatus;
   timestamp?: string;
   buildContainerId?: string; // The image ID that is used to build the image
+  timeToBuild?: number; // Time to build in seconds
 }
 
 export type BootcBuildStatus = 'running' | 'creating' | 'success' | 'error' | 'lost' | 'deleting';
