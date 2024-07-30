@@ -26,6 +26,7 @@ import { bootcClient } from './api/client';
 const mockHistoryInfo: BootcBuildInfo[] = [
   {
     id: 'name1',
+    imageId: 'sha256:image1',
     image: 'image1',
     engineId: 'engine1',
     tag: 'latest',
@@ -36,6 +37,7 @@ const mockHistoryInfo: BootcBuildInfo[] = [
   {
     id: 'name2',
     image: 'image2',
+    imageId: 'sha256:image',
     engineId: 'engine2',
     tag: 'latest',
     type: ['iso'],
@@ -84,15 +86,18 @@ const mockImageInspect = {
   Architecture: 'amd64',
 } as unknown as ImageInspectInfo;
 
+const mockIsLinux = false;
+
 vi.mock('./api/client', async () => {
   return {
     bootcClient: {
-      checkPrereqs: vi.fn(),
+      checkPodmanMachinePrereqs: vi.fn(),
       buildExists: vi.fn(),
       listHistoryInfo: vi.fn(),
       listBootcImages: vi.fn(),
       inspectImage: vi.fn(),
       inspectManifest: vi.fn(),
+      isLinux: vi.fn().mockImplementation(() => mockIsLinux),
     },
     rpcBrowser: {
       subscribe: () => {
@@ -109,7 +114,7 @@ test('Render shows correct images and history', async () => {
   vi.mocked(bootcClient.listHistoryInfo).mockResolvedValue(mockHistoryInfo);
   vi.mocked(bootcClient.listBootcImages).mockResolvedValue(mockBootcImages);
   vi.mocked(bootcClient.buildExists).mockResolvedValue(false);
-  vi.mocked(bootcClient.checkPrereqs).mockResolvedValue(undefined);
+  vi.mocked(bootcClient.checkPodmanMachinePrereqs).mockResolvedValue(undefined);
   render(Build);
 
   // Wait until children length is 2 meaning it's fully rendered / propagated the changes
@@ -154,7 +159,7 @@ test('Check that preselecting an image works', async () => {
   vi.mocked(bootcClient.listHistoryInfo).mockResolvedValue(mockHistoryInfo);
   vi.mocked(bootcClient.listBootcImages).mockResolvedValue(mockBootcImages);
   vi.mocked(bootcClient.buildExists).mockResolvedValue(false);
-  vi.mocked(bootcClient.checkPrereqs).mockResolvedValue(undefined);
+  vi.mocked(bootcClient.checkPodmanMachinePrereqs).mockResolvedValue(undefined);
   render(Build, { imageName: 'image2', imageTag: 'latest' });
 
   // Wait until children length is 2 meaning it's fully rendered / propagated the changes
@@ -179,7 +184,7 @@ test('Check that prereq validation works', async () => {
   const prereq = 'Something is missing';
   vi.mocked(bootcClient.listHistoryInfo).mockResolvedValue(mockHistoryInfo);
   vi.mocked(bootcClient.listBootcImages).mockResolvedValue(mockBootcImages);
-  vi.mocked(bootcClient.checkPrereqs).mockResolvedValue(prereq);
+  vi.mocked(bootcClient.checkPodmanMachinePrereqs).mockResolvedValue(prereq);
   vi.mocked(bootcClient.buildExists).mockResolvedValue(false);
 
   render(Build);
@@ -201,7 +206,7 @@ test('Check that prereq validation works', async () => {
 test('Check that overwriting an existing build works', async () => {
   vi.mocked(bootcClient.listHistoryInfo).mockResolvedValue(mockHistoryInfo);
   vi.mocked(bootcClient.listBootcImages).mockResolvedValue(mockBootcImages);
-  vi.mocked(bootcClient.checkPrereqs).mockResolvedValue(undefined);
+  vi.mocked(bootcClient.checkPodmanMachinePrereqs).mockResolvedValue(undefined);
   vi.mocked(bootcClient.buildExists).mockResolvedValue(true);
 
   // Mock the inspectImage to return 'amd64' as the architecture so it's selected / we can test the override function
@@ -296,7 +301,7 @@ const fakedImageInspect: ImageInspectInfo = {
 test('Test that arm64 is disabled in form if inspectImage returns no arm64', async () => {
   vi.mocked(bootcClient.listHistoryInfo).mockResolvedValue(mockHistoryInfo);
   vi.mocked(bootcClient.listBootcImages).mockResolvedValue(mockBootcImages);
-  vi.mocked(bootcClient.checkPrereqs).mockResolvedValue(undefined);
+  vi.mocked(bootcClient.checkPodmanMachinePrereqs).mockResolvedValue(undefined);
   vi.mocked(bootcClient.buildExists).mockResolvedValue(false);
   vi.mocked(bootcClient.inspectImage).mockResolvedValue(fakedImageInspect);
 
@@ -325,7 +330,7 @@ test('In the rare case that Architecture from inspectImage is blank, do not sele
 
   vi.mocked(bootcClient.listHistoryInfo).mockResolvedValue(mockHistoryInfo);
   vi.mocked(bootcClient.listBootcImages).mockResolvedValue(mockBootcImages);
-  vi.mocked(bootcClient.checkPrereqs).mockResolvedValue(undefined);
+  vi.mocked(bootcClient.checkPodmanMachinePrereqs).mockResolvedValue(undefined);
   vi.mocked(bootcClient.buildExists).mockResolvedValue(false);
   vi.mocked(bootcClient.inspectImage).mockResolvedValue(fakeImageNoArchitecture);
 
@@ -370,7 +375,7 @@ test('Do not show an image if it has no repotags and has isManifest as false', a
   vi.mocked(bootcClient.listHistoryInfo).mockResolvedValue(mockHistoryInfo);
   vi.mocked(bootcClient.listBootcImages).mockResolvedValue(mockedImages);
   vi.mocked(bootcClient.buildExists).mockResolvedValue(false);
-  vi.mocked(bootcClient.checkPrereqs).mockResolvedValue(undefined);
+  vi.mocked(bootcClient.checkPodmanMachinePrereqs).mockResolvedValue(undefined);
   render(Build);
 
   // Wait until children length is 1
@@ -391,7 +396,7 @@ test('Do not show an image if it has no repotags and has isManifest as false', a
 test('If inspectImage fails, do not select any architecture / make them available', async () => {
   vi.mocked(bootcClient.listHistoryInfo).mockResolvedValue(mockHistoryInfo);
   vi.mocked(bootcClient.listBootcImages).mockResolvedValue(mockBootcImages);
-  vi.mocked(bootcClient.checkPrereqs).mockResolvedValue(undefined);
+  vi.mocked(bootcClient.checkPodmanMachinePrereqs).mockResolvedValue(undefined);
   vi.mocked(bootcClient.buildExists).mockResolvedValue(false);
   vi.mocked(bootcClient.inspectImage).mockRejectedValue('Error');
 
@@ -483,7 +488,7 @@ test('Show the image if isManifest: true and Labels is empty', async () => {
   vi.mocked(bootcClient.listHistoryInfo).mockResolvedValue(mockHistoryInfo);
   vi.mocked(bootcClient.listBootcImages).mockResolvedValue(mockedImages);
   vi.mocked(bootcClient.buildExists).mockResolvedValue(false);
-  vi.mocked(bootcClient.checkPrereqs).mockResolvedValue(undefined);
+  vi.mocked(bootcClient.checkPodmanMachinePrereqs).mockResolvedValue(undefined);
   render(Build);
 
   waitFor(() => {
@@ -607,7 +612,7 @@ test('have amd64 and arm64 NOT disabled (opacity-50) if inspectManifest contains
   vi.mocked(bootcClient.listHistoryInfo).mockResolvedValue(mockHistoryInfo);
   vi.mocked(bootcClient.listBootcImages).mockResolvedValue(mockedImages);
   vi.mocked(bootcClient.buildExists).mockResolvedValue(false);
-  vi.mocked(bootcClient.checkPrereqs).mockResolvedValue(undefined);
+  vi.mocked(bootcClient.checkPodmanMachinePrereqs).mockResolvedValue(undefined);
   render(Build);
 
   waitFor(() => {
@@ -680,7 +685,7 @@ test('if a manifest is created that has the label "6.8.9-300.fc40.aarch64" in as
   vi.mocked(bootcClient.listHistoryInfo).mockResolvedValue(mockHistoryInfo);
   vi.mocked(bootcClient.listBootcImages).mockResolvedValue([mockFedoraImage]);
   vi.mocked(bootcClient.buildExists).mockResolvedValue(false);
-  vi.mocked(bootcClient.checkPrereqs).mockResolvedValue(undefined);
+  vi.mocked(bootcClient.checkPodmanMachinePrereqs).mockResolvedValue(undefined);
 
   render(Build);
 

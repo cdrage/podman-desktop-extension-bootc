@@ -20,7 +20,7 @@ import type { BootcBuildInfo, BuildType } from './models/bootc';
 import type { ImageInfo, ImageInspectInfo, ManifestInspectInfo } from '@podman-desktop/api';
 
 export abstract class BootcApi {
-  abstract checkPrereqs(): Promise<string | undefined>;
+  abstract checkPodmanMachinePrereqs(): Promise<string | undefined>;
   abstract buildExists(folder: string, types: BuildType[]): Promise<boolean>;
   abstract buildImage(build: BootcBuildInfo, overwrite?: boolean): Promise<void>;
   abstract pullImage(image: string): Promise<void>;
@@ -35,6 +35,7 @@ export abstract class BootcApi {
   abstract openFolder(folder: string): Promise<boolean>;
   abstract generateUniqueBuildID(name: string): Promise<string>;
   abstract openLink(link: string): Promise<void>;
+  abstract isLinux(): Promise<boolean>;
   abstract telemetryLogUsage(eventName: string, data?: Record<string, unknown> | undefined): Promise<void>;
   abstract telemetryLogError(eventName: string, data?: Record<string, unknown> | undefined): Promise<void>;
 }

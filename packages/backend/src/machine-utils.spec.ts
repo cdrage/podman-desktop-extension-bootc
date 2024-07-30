@@ -247,7 +247,9 @@ test('Fail prereq if not Podman v5', async () => {
     Promise.resolve({ stdout: JSON.stringify(fakeMachineInfoJSON) } as extensionApi.RunResult),
   );
 
-  expect(await machineUtils.checkPrereqs()).toEqual('Podman v5.0 or higher is required to build disk images.');
+  expect(await machineUtils.checkPodmanMachinePrereqs()).toEqual(
+    'Podman v5.0 or higher is required to build disk images.',
+  );
 });
 
 test('Fail prereq if not rootful', async () => {
@@ -270,7 +272,7 @@ test('Fail prereq if not rootful', async () => {
     Promise.resolve(JSON.stringify({ HostUser: { Rootful: false } })),
   );
 
-  expect(await machineUtils.checkPrereqs()).toEqual(
+  expect(await machineUtils.checkPodmanMachinePrereqs()).toEqual(
     'The podman machine is not set as rootful. Please recreate the podman machine with rootful privileges set and try again.',
   );
 });
@@ -298,5 +300,5 @@ test('Pass prereq if rootful v5 machine', async () => {
   vi.spyOn(fs.promises, 'readFile').mockResolvedValueOnce(JSON.stringify({ HostUser: { Rootful: true } }));
   await expect(machineUtils.isPodmanMachineRootful()).resolves.toBe(true);
 
-  expect(await machineUtils.checkPrereqs()).toEqual(undefined);
+  expect(await machineUtils.checkPodmanMachinePrereqs()).toEqual(undefined);
 });

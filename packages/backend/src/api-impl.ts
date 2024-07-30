@@ -25,7 +25,7 @@ import { History } from './history';
 import * as containerUtils from './container-utils';
 import { Messages } from '/@shared/src/messages/Messages';
 import { telemetryLogger } from './extension';
-import { checkPrereqs } from './machine-utils';
+import { checkPodmanMachinePrereqs, isLinux } from './machine-utils';
 
 export class BootcApiImpl implements BootcApi {
   private history: History;
@@ -39,8 +39,8 @@ export class BootcApiImpl implements BootcApi {
     this.webview = webview;
   }
 
-  async checkPrereqs(): Promise<string | undefined> {
-    return checkPrereqs();
+  async checkPodmanMachinePrereqs(): Promise<string | undefined> {
+    return checkPodmanMachinePrereqs();
   }
 
   async buildExists(folder: string, types: BuildType[]): Promise<boolean> {
@@ -238,6 +238,10 @@ export class BootcApiImpl implements BootcApi {
   // Log an error to telemetry
   async telemetryLogError(eventName: string, data?: Record<string, unknown>): Promise<void> {
     telemetryLogger.logError(eventName, data);
+  }
+
+  async isLinux(): Promise<boolean> {
+    return isLinux();
   }
 
   // The API does not allow callbacks through the RPC, so instead

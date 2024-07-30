@@ -96,7 +96,7 @@ export async function isPodmanV5Machine() {
   }
 }
 
-export async function checkPrereqs(): Promise<string | undefined> {
+export async function checkPodmanMachinePrereqs(): Promise<string | undefined> {
   const isPodmanV5 = await isPodmanV5Machine();
   if (!isPodmanV5) {
     return 'Podman v5.0 or higher is required to build disk images.';
