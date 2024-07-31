@@ -34,6 +34,7 @@ let availableArchitectures: string[] = [];
 // Build options
 let buildFolder: string;
 let buildConfigFile: string;
+let buildChown: string;
 let buildType: BuildType[] = [];
 let buildArch: string | undefined;
 let buildFilesystem: string = ''; // Default filesystem auto-selected / empty
@@ -193,6 +194,7 @@ async function buildBootcImage() {
     engineId: image?.engineId ?? '',
     folder: buildFolder,
     buildConfigFilePath: buildConfigFile,
+    chown: buildChown,
     type: buildType,
     arch: buildArch,
     filesystem: buildFilesystem,
@@ -678,7 +680,7 @@ export function goToHomePage(): void {
                       name="buildconfig"
                       id="buildconfig"
                       bind:value={buildConfigFile}
-                      placeholder="Build configuration file (config.toml or config.json)"
+                      placeholder="Build configuration file (ex. config.toml or config.json)"
                       class="w-full"
                       aria-label="buildconfig-select" />
                     <Button on:click={() => getBuildConfigFile()}>Browse...</Button>
@@ -693,6 +695,20 @@ export function goToHomePage(): void {
                   </p>
                 </div>
 
+                <!-- chown -->
+                <div class="mb-2">
+                  <label for="chown" class="block mb-2 font-semibold">Change file owner and group</label>
+                  <div class="flex flex-row space-x-3">
+                    <Input
+                      name="chown"
+                      id="chown"
+                      bind:value={buildChown}
+                      placeholder="chown GID and UID parameters (ex. 1000:1000)"
+                      class="w-full"
+                      aria-label="chown-select" />
+                  </div>
+                </div>
+
                 <!-- AWS -->
                 <div>
                   <span class="font-semibold block">Upload image to AWS</span>
@@ -703,7 +719,7 @@ export function goToHomePage(): void {
                   bind:value={awsAmiName}
                   name="amiName"
                   id="amiName"
-                  placeholder="AMI Name to be used"
+                  placeholder="AMI name to be used"
                   class="w-full" />
 
                 <label for="awsBucket" class="block mt-2 text-sm font-bold">S3 Bucket</label>
