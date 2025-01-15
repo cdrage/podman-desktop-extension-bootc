@@ -18,25 +18,33 @@
 
 import path from 'node:path';
 import * as extensionApi from '@podman-desktop/api';
-import { isArm, isLinux, isMac } from './machine-utils';
+import { isArm, isLinux, isMac, isWindows } from './machine-utils';
 import fs from 'node:fs';
 import type { BootcBuildInfo } from '/@shared/src/models/bootc';
 
 // Singular pid file location (can only run 1 VM at a time)
 // eslint-disable-next-line sonarjs/publicly-writable-directories
-const pidFile = '/tmp/qemu-podman-desktop.pid';
+const unixPidLocation = '/tmp/qemu-podman-desktop.pid';
+
+// Use ProgramData location for qemu pid file on Windows
+const windowsPidLocation = 'C:\\ProgramData\\qemu-podman-desktop.pid';
 
 // MacOS related
 const macQemuArm64Binary = '/opt/homebrew/bin/qemu-system-aarch64';
 const macQemuArm64Edk2 = '/opt/homebrew/share/qemu/edk2-aarch64-code.fd';
 const macQemuX86Binary = '/opt/homebrew/bin/qemu-system-x86_64';
-
 // Linux related
 // Context: on linux, since we are in a flatpak environment, we let podman desktop handle where the qemu
 // binary is, so we just need to call qemu-system-aarch64 instead of the full path
 // this is not an issue with the mac version since we are not in a containerized environment and we explicitly need the brew version.
 const linuxQemuArm64Binary = 'qemu-system-aarch64';
 const linuxQemuX86Binary = 'qemu-system-x86_64';
+
+// Windows related
+// Make sure we use the ".exe" for qemu
+// We use the "default" location of the install as to follow the installation guide for QEMU.
+const windowsQemuX86Binary = 'C:\\Program Files\\qemu\\qemu-system-x86_64.exe';
+const windowsQemuArm64Binary = 'C:\\Program Files\\qemu\\qemu-system-aarch64.exe';
 
 // Default values for VM's
 const hostForwarding = 'hostfwd=tcp::2222-:22';
@@ -47,9 +55,19 @@ const rawImageLocation = 'image/disk.raw';
 // Abstract base class
 export abstract class VMManagerBase {
   protected build: BootcBuildInfo;
+  protected pidFile: string;
 
   constructor(build: BootcBuildInfo) {
     this.build = build;
+    this.pidFile = this.getPidFilePath();
+  }
+
+  private getPidFilePath(): string {
+    if (isWindows()) {
+      return windowsPidLocation;
+    }
+    // Default for macOS and Linux
+    return unixPidLocation;
   }
 
   public abstract checkVMLaunchPrereqs(): Promise<string | undefined>;
@@ -72,7 +90,16 @@ export abstract class VMManagerBase {
         );
       }
 
-      await extensionApi.process.exec('sh', ['-c', `${command.join(' ')}`]);
+      console.log(`(EXPERIMENTAL MODE) Launching VM with command: ${command.join(' ')}`);
+
+      // If on Linux or Mac, we need to use the shell to execute the command
+      if (isLinux() || isMac()) {
+        await extensionApi.process.exec('sh', ['-c', `${command.join(' ')}`]);
+      } else if (isWindows()) {
+        await extensionApi.process.exec('cmd.exe', ['/C', `"${command.join(' ')}"`]);
+      } else {
+        throw new Error('Unsupported OS for running CLI');
+      }
     } catch (e) {
       handleStdError(e);
     }
@@ -122,7 +149,7 @@ class MacArmNativeVMManager extends VMManagerBase {
       '-serial',
       `websocket:127.0.0.1:${websocketPort},server,nowait`,
       '-pidfile',
-      pidFile,
+      this.pidFile,
       '-netdev',
       `user,id=usernet,${hostForwarding}`,
       '-device',
@@ -169,7 +196,7 @@ class MacArmX86VMManager extends VMManagerBase {
       '-serial',
       `websocket:127.0.0.1:${websocketPort},server,nowait`,
       '-pidfile',
-      pidFile,
+      this.pidFile,
       '-netdev',
       `user,id=usernet,${hostForwarding}`,
       '-device',
@@ -215,7 +242,7 @@ class LinuxArmVMManager extends VMManagerBase {
       '-serial',
       `websocket:127.0.0.1:${websocketPort},server,nowait`,
       '-pidfile',
-      pidFile,
+      this.pidFile,
       '-netdev',
       `user,id=usernet,${hostForwarding}`,
       '-device',
@@ -259,13 +286,101 @@ class LinuxX86VMManager extends VMManagerBase {
       '-serial',
       `websocket:127.0.0.1:${websocketPort},server,nowait`,
       '-pidfile',
-      pidFile,
+      this.pidFile,
       '-netdev',
       `user,id=usernet,${hostForwarding}`,
       '-device',
       'e1000,netdev=usernet',
       '-snapshot',
       diskImage,
+    ];
+  }
+}
+
+class WindowsX86VMManager extends VMManagerBase {
+  public async checkVMLaunchPrereqs(): Promise<string | undefined> {
+    const diskImage = this.getDiskImagePath();
+    if (!fs.existsSync(diskImage)) {
+      return `Raw disk image not found at ${diskImage}. Please build a .raw disk image first.`;
+    }
+
+    if (this.build.arch !== 'amd64') {
+      return `Unsupported architecture: ${this.build.arch}`;
+    }
+
+    const installDisclaimer = 'Please install qemu via our installation document';
+    if (!fs.existsSync(windowsQemuX86Binary)) {
+      return `QEMU x86 binary not found at ${windowsQemuX86Binary}. ${installDisclaimer}`;
+    }
+
+    return undefined;
+  }
+
+  protected generateLaunchCommand(diskImage: string): string[] {
+    return [
+      `"${windowsQemuX86Binary}"`,
+      '-m',
+      memorySize,
+      '-nographic',
+      '-cpu',
+      'Broadwell-v4',
+      '-smp',
+      '4',
+      '-serial',
+      `websocket:127.0.0.1:${websocketPort},server,nowait`,
+      '-pidfile',
+      this.pidFile,
+      '-netdev',
+      `user,id=usernet,${hostForwarding}`,
+      '-device',
+      'e1000,netdev=usernet',
+      '-snapshot',
+      `"${diskImage}"`,
+    ];
+  }
+}
+
+class WindowsArmVMManager extends VMManagerBase {
+  public async checkVMLaunchPrereqs(): Promise<string | undefined> {
+    const diskImage = this.getDiskImagePath();
+    if (!fs.existsSync(diskImage)) {
+      return `Raw disk image not found at ${diskImage}. Please build a .raw disk image first.`;
+    }
+
+    if (this.build.arch !== 'arm64') {
+      return `Unsupported architecture: ${this.build.arch}`;
+    }
+
+    const installDisclaimer = 'Please install qemu via our installation document';
+    if (!fs.existsSync(windowsQemuArm64Binary)) {
+      return `QEMU arm64 binary not found at ${windowsQemuArm64Binary}. ${installDisclaimer}`;
+    }
+
+    return undefined;
+  }
+
+  protected generateLaunchCommand(diskImage: string): string[] {
+    return [
+      `"${windowsQemuArm64Binary}"`,
+      '-m',
+      memorySize,
+      '-nographic',
+      '-M',
+      'virt',
+      '-cpu',
+      'max',
+      '-smp',
+      '4',
+      '-serial',
+      `websocket:127.0.0.1:${websocketPort},server,nowait`,
+      '-pidfile',
+      this.pidFile,
+      '-netdev',
+      `user,id=usernet,${hostForwarding}`,
+      '-device',
+      'virtio-net,netdev=usernet',
+      '-snapshot',
+      `"${diskImage}"`,
     ];
   }
 }
@@ -285,14 +400,31 @@ export function createVMManager(build: BootcBuildInfo): VMManagerBase {
     } else if (build.arch === 'amd64') {
       return new LinuxX86VMManager(build);
     }
+  } else if (isWindows()) {
+    if (build.arch === 'amd64') {
+      return new WindowsX86VMManager(build);
+    } else if (build.arch === 'arm64') {
+      return new WindowsArmVMManager(build);
+    }
   }
   throw new Error('Unsupported OS or architecture');
 }
 
 // Function to stop the current VM
 export async function stopCurrentVM(): Promise<void> {
+
+  const pidFile = isWindows() ? windowsPidLocation : unixPidLocation;
+
   try {
-    await extensionApi.process.exec('sh', ['-c', `kill -9 \`cat ${pidFile}\``]);
+    const pid = fs.readFileSync(pidFile, 'utf-8').trim();
+
+    // Used for macOS and Linux
+    if (isLinux() || isMac()) {
+      await extensionApi.process.exec('sh', ['-c', `kill -9 ${pid}`]);
+    } else if (isWindows()) {
+      // Use taskkill to kill the process
+      await extensionApi.process.exec('taskkill', ['/F', '/PID', pid]);
+    }
   } catch (e: unknown) {
     if (e instanceof Error && 'stderr' in e && typeof e.stderr === 'string' && e.stderr.includes('No such process')) {
       return;
@@ -301,11 +433,11 @@ export async function stopCurrentVM(): Promise<void> {
   }
 }
 
-// Error handling function
 function handleStdError(e: unknown): void {
+  console.log("DEBUG: ", e);
   if (e instanceof Error && 'stderr' in e) {
     throw new Error(typeof e.stderr === 'string' ? e.stderr : 'Unknown error');
   } else {
-    throw new Error('Unknown error');
+    throw new Error(`Unknown error ${e}`);
   }
 }
