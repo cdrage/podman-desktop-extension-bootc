@@ -199,3 +199,27 @@ export async function getUidGid(): Promise<string> {
   const { stdout: gidOutput } = await extensionApi.process.exec('id', ['-g']);
   return `${uidOutput.trim()}:${gidOutput.trim()}`;
 }
+
+// Convert a Windows path to a POSIX-style path for use in container volume mounts.
+// This is necessary because Podman on Windows (especially with Hyper-V) cannot parse
+// Windows paths like "C:\Users\..." in volume mount strings due to the colon being
+// interpreted as a separator between source and destination.
+// Example: "C:\Users\admin\Documents" -> "/mnt/c/Users/admin/Documents"
+export function convertToMountPath(windowsPath: string): string {
+  if (!isWindows()) {
+    return windowsPath;
+  }
+
+  // Match Windows drive letter paths like C:\, D:\, etc.
+  const driveLetterMatch = windowsPath.match(/^([a-zA-Z]):[/\\]/);
+  if (!driveLetterMatch) {
+    // Not a Windows absolute path with drive letter, return as-is
+    return windowsPath;
+  }
+
+  const driveLetter = driveLetterMatch[1].toLowerCase();
+  // Remove the drive letter and colon, replace backslashes with forward slashes
+  const pathWithoutDrive = windowsPath.slice(2).replace(/\\/g, '/');
+
+  return `/mnt/${driveLetter}${pathWithoutDrive}`;
+}

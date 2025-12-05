@@ -434,6 +434,9 @@ export function createBuilderImageOptions(
   }
 
   // Create the image options for the "bootc-image-builder" container
+  // Convert paths to POSIX-style for Windows compatibility with Podman volume mounts
+  const outputFolder = machineUtils.convertToMountPath(build.folder);
+
   const options: ContainerCreateOptions = {
     name: name,
     Image: builder ?? bootcImageBuilderCentos,
@@ -441,7 +444,7 @@ export function createBuilderImageOptions(
     HostConfig: {
       Privileged: true,
       SecurityOpt: ['label=type:unconfined_t'],
-      Binds: [build.folder + ':/output/', '/var/lib/containers/storage:/var/lib/containers/storage'],
+      Binds: [outputFolder + ':/output/', '/var/lib/containers/storage:/var/lib/containers/storage'],
     },
 
     // Add the appropriate labels for it to appear correctly in the Podman Desktop UI.
@@ -458,7 +461,8 @@ export function createBuilderImageOptions(
     cmd.push('--aws-ami-name', build.awsAmiName, '--aws-bucket', build.awsBucket, '--aws-region', build.awsRegion);
 
     if (options.HostConfig?.Binds) {
-      options?.HostConfig?.Binds.push(path.join(os.homedir(), '.aws') + ':/root/.aws:ro');
+      const awsConfigPath = machineUtils.convertToMountPath(path.join(os.homedir(), '.aws'));
+      options?.HostConfig?.Binds.push(awsConfigPath + ':/root/.aws:ro');
     }
   }
 
@@ -471,7 +475,8 @@ export function createBuilderImageOptions(
 
     // Add the mount to the configuration file.
     if (options.HostConfig?.Binds) {
-      options.HostConfig.Binds.push(build.buildConfigFilePath + `:/config${ext}:ro`);
+      const configPath = machineUtils.convertToMountPath(build.buildConfigFilePath);
+      options.HostConfig.Binds.push(configPath + `:/config${ext}:ro`);
     }
   }
 
@@ -489,7 +494,8 @@ export function createBuilderImageOptions(
 
       // Add the mount to the configuration file
       if (options.HostConfig?.Binds) {
-        options.HostConfig.Binds.push(buildConfigPath + ':/config.json:ro');
+        const configMountPath = machineUtils.convertToMountPath(buildConfigPath);
+        options.HostConfig.Binds.push(configMountPath + ':/config.json:ro');
       }
     }
   }
