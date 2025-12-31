@@ -60,4 +60,5 @@ export abstract class BootcApi {
   abstract stopCurrentVM(): Promise<void>;
   abstract telemetryLogUsage(eventName: string, data?: Record<string, unknown> | undefined): Promise<void>;
   abstract telemetryLogError(eventName: string, data?: Record<string, unknown> | undefined): Promise<void>;
+  abstract testBootcImage(image: string, engineId: string): Promise<void>;
 }

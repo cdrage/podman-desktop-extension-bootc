@@ -424,6 +424,35 @@ export class BootcApiImpl implements BootcApi {
     return podmanDesktopApi.env.clipboard.readText();
   }
 
+  // Test a bootc image by running it in a container environment
+  // This allows users to quickly test their bootc image without building a full disk image
+  // Note: Many systemd components will fail as this is not a full VM environment
+  async testBootcImage(image: string, engineId: string): Promise<void> {
+    // Generate a unique container name based on the image name
+    const imageName = image.split('/').pop()?.split(':')[0] ?? 'bootc';
+    const containerName = `bootc-test-${imageName}-${Date.now()}`;
+
+    try {
+      // Create and start a container from the bootc image with an interactive shell
+      const options: podmanDesktopApi.ContainerCreateOptions = {
+        name: containerName,
+        Image: image,
+        Tty: true,
+        OpenStdin: true,
+        Cmd: ['/bin/bash'],
+      };
+
+      const result = await podmanDesktopApi.containerEngine.createContainer(engineId, options);
+
+      // Navigate to the container terminal in Podman Desktop
+      await podmanDesktopApi.navigation.navigateToContainerTerminal(result.id);
+    } catch (err) {
+      await podmanDesktopApi.window.showErrorMessage(`Error testing bootc image: ${err}`);
+      console.error('Error testing bootc image: ', err);
+      throw err;
+    }
+  }
+
   // The API does not allow callbacks through the RPC, so instead
   // we send "notify" messages to the frontend to trigger a refresh
   // this method is internal and meant to be used by the API implementation

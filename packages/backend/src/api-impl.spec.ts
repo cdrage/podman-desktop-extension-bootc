@@ -40,6 +40,10 @@ vi.mock(
         listImages: vi.fn(),
         listContainers: vi.fn(),
         deleteImage: vi.fn(),
+        createContainer: vi.fn(),
+      },
+      navigation: {
+        navigateToContainerTerminal: vi.fn(),
       },
       env: {
         openExternal: vi.fn(),
@@ -176,4 +180,40 @@ test('selectVMImageFile should call the extension api', async () => {
   await apiImpl.selectVMImageFile();
 
   expect(podmanDesktopApi.window.showOpenDialog).toHaveBeenCalled();
+});
+
+test('testBootcImage should create container and navigate to terminal', async () => {
+  const containerId = 'test-container-id';
+  vi.mocked(podmanDesktopApi.containerEngine.createContainer).mockResolvedValue({
+    id: containerId,
+    engineId: 'podman-engine',
+  });
+
+  const apiImpl = createAPI();
+
+  await apiImpl.testBootcImage('quay.io/test/image:latest', 'podman-engine');
+
+  expect(podmanDesktopApi.containerEngine.createContainer).toHaveBeenCalledWith(
+    'podman-engine',
+    expect.objectContaining({
+      Image: 'quay.io/test/image:latest',
+      Tty: true,
+      OpenStdin: true,
+      Cmd: ['/bin/bash'],
+    }),
+  );
+  expect(podmanDesktopApi.navigation.navigateToContainerTerminal).toHaveBeenCalledWith(containerId);
+});
+
+test('testBootcImage should show error message on failure', async () => {
+  const error = new Error('Container creation failed');
+  vi.mocked(podmanDesktopApi.containerEngine.createContainer).mockRejectedValue(error);
+
+  const apiImpl = createAPI();
+
+  await expect(apiImpl.testBootcImage('quay.io/test/image:latest', 'podman-engine')).rejects.toThrow(error);
+
+  expect(podmanDesktopApi.window.showErrorMessage).toHaveBeenCalledWith(
+    expect.stringContaining('Error testing bootc image'),
+  );
 });

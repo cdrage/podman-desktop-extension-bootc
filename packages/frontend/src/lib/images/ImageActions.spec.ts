@@ -31,6 +31,7 @@ vi.mock('/@/api/client', async () => {
   return {
     bootcClient: {
       deleteImage: vi.fn(),
+      testBootcImage: vi.fn(),
     },
     rpcBrowser: {
       subscribe: (): Subscriber => {
@@ -80,4 +81,42 @@ test('Expect Delete action works', async () => {
   await fireEvent.click(button);
 
   expect(bootcClient.deleteImage).toHaveBeenCalledWith('podman', 'test');
+});
+
+test('Expect Test Image action works', async () => {
+  const image: ImageInfoUI = {
+    id: 'test',
+    engineId: 'podman',
+    name: 'quay.io/test/image',
+    tag: 'latest',
+    status: 'unused',
+  } as ImageInfoUI;
+
+  render(ImageActions, { object: image });
+
+  const button = screen.getByTitle('Test Image');
+  expect(button).toBeDefined();
+
+  await fireEvent.click(button);
+
+  expect(bootcClient.testBootcImage).toHaveBeenCalledWith('quay.io/test/image:latest', 'podman');
+});
+
+test('Expect Test Image action works without tag', async () => {
+  const image: ImageInfoUI = {
+    id: 'test',
+    engineId: 'podman',
+    name: 'quay.io/test/image',
+    tag: '',
+    status: 'unused',
+  } as ImageInfoUI;
+
+  render(ImageActions, { object: image });
+
+  const button = screen.getByTitle('Test Image');
+  expect(button).toBeDefined();
+
+  await fireEvent.click(button);
+
+  expect(bootcClient.testBootcImage).toHaveBeenCalledWith('quay.io/test/image', 'podman');
 });
