@@ -23,7 +23,7 @@ import { expect, test, vi } from 'vitest';
 import type { ImageInfoUI } from './ImageInfoUI';
 import ImageActions from './ImageActions.svelte';
 import userEvent from '@testing-library/user-event';
-import { gotoImageBuild } from '../navigation';
+import { gotoTestImage } from '../navigation';
 import type { Subscriber } from '/@shared/src/messages/MessageProxy';
 import { bootcClient } from '/@/api/client';
 
@@ -31,6 +31,7 @@ vi.mock('/@/api/client', async () => {
   return {
     bootcClient: {
       deleteImage: vi.fn(),
+      telemetryLogUsage: vi.fn(),
     },
     rpcBrowser: {
       subscribe: (): Subscriber => {
@@ -44,24 +45,8 @@ vi.mock('/@/api/client', async () => {
 
 vi.mock('../navigation', async () => {
   return {
-    gotoImageBuild: vi.fn(),
+    gotoTestImage: vi.fn(),
   };
-});
-
-test('Expect Build action works', async () => {
-  const image: ImageInfoUI = {
-    name: 'dummy',
-    status: 'unused',
-  } as ImageInfoUI;
-
-  render(ImageActions, { object: image });
-
-  const build = screen.getByTitle('Build Disk Image');
-  expect(build).toBeDefined();
-
-  await userEvent.click(build);
-
-  expect(gotoImageBuild).toHaveBeenCalled();
 });
 
 test('Expect Delete action works', async () => {
@@ -80,4 +65,23 @@ test('Expect Delete action works', async () => {
   await fireEvent.click(button);
 
   expect(bootcClient.deleteImage).toHaveBeenCalledWith('podman', 'test');
+});
+
+test('Expect Run Image action navigates to run page', async () => {
+  const image: ImageInfoUI = {
+    id: 'test',
+    engineId: 'podman',
+    name: 'quay.io/test/image',
+    tag: 'latest',
+    status: 'unused',
+  } as ImageInfoUI;
+
+  render(ImageActions, { object: image });
+
+  const button = screen.getByTitle('Run Image');
+  expect(button).toBeDefined();
+
+  await fireEvent.click(button);
+
+  expect(gotoTestImage).toHaveBeenCalledWith('quay.io/test/image', 'latest', 'podman');
 });

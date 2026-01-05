@@ -19,8 +19,14 @@
 import * as podmanDesktopApi from '@podman-desktop/api';
 import type { CreateVmOptions, VmDetails } from '@crc-org/macadam.js';
 import type { ImageInfo, ContainerInfo } from '@podman-desktop/api';
-import type { BootcApi } from '/@shared/src/BootcAPI';
+import type { BootcApi, BuildContainerImageOptions, BcvkBinaryInfo } from '/@shared/src/BootcAPI';
 import type { BootcBuildInfo, BuildType } from '/@shared/src/models/bootc';
+import {
+  BASE_IMAGES,
+  CONTAINERFILE_EXAMPLES,
+  type BaseImage,
+  type ContainerfileExample,
+} from '/@shared/src/models/baseImages';
 import { buildDiskImage, buildExists } from './build-disk-image';
 import { History } from './history';
 import * as containerUtils from './container-utils';
@@ -33,11 +39,15 @@ import { createVMManager, stopCurrentVM } from './vm-manager';
 import examplesCatalog from '../assets/examples.json';
 import type { ExamplesList } from '/@shared/src/models/examples';
 import { MacadamHandler } from './macadam';
+import { BcvkHandler } from './bcvk';
 
 export class BootcApiImpl implements BootcApi {
   static readonly CHANNEL: string = 'BootcApi';
   private history: History;
   private webview: podmanDesktopApi.Webview;
+  private containerBuildLogs: string = '';
+  private containerBuildCancelled: boolean = false;
+  private bcvkHandler: BcvkHandler;
 
   constructor(
     private readonly extensionContext: podmanDesktopApi.ExtensionContext,
@@ -46,6 +56,27 @@ export class BootcApiImpl implements BootcApi {
   ) {
     this.history = new History(extensionContext.storagePath);
     this.webview = webview;
+    this.bcvkHandler = new BcvkHandler(extensionContext, telemetryLogger);
+    // Initialize bcvk handler asynchronously
+    this.bcvkHandler.init().catch(err => console.error('Failed to initialize bcvk handler:', err));
+  }
+
+  // Get the current container build logs (for polling)
+  async getContainerBuildLogs(): Promise<string> {
+    return this.containerBuildLogs;
+  }
+
+  // Clear container build logs
+  async clearContainerBuildLogs(): Promise<void> {
+    this.containerBuildLogs = '';
+    this.containerBuildCancelled = false;
+  }
+
+  // Cancel the current container build
+  async cancelContainerBuild(): Promise<void> {
+    this.containerBuildCancelled = true;
+    this.containerBuildLogs += '\n--- Build cancelled by user ---\n';
+    this.telemetryLogger.logUsage('buildContainerImage-cancelled', {});
   }
 
   async getExamples(): Promise<ExamplesList> {
@@ -422,6 +453,274 @@ export class BootcApiImpl implements BootcApi {
   // Read from the podman desktop clipboard
   async readFromClipboard(): Promise<string> {
     return podmanDesktopApi.env.clipboard.readText();
+  }
+
+  // Get the list of available base images for the onboarding wizard
+  async getBaseImages(): Promise<BaseImage[]> {
+    return BASE_IMAGES;
+  }
+
+  async getContainerfileExamples(): Promise<ContainerfileExample[]> {
+    return CONTAINERFILE_EXAMPLES;
+  }
+
+  // Build a container image from a Containerfile content
+  async buildContainerImage(options: BuildContainerImageOptions): Promise<void> {
+    const { imageTag, containerfileContent, arch } = options;
+    const telemetryData: Record<string, unknown> = {};
+    telemetryData.imageTag = imageTag;
+
+    let tempDir: string | undefined;
+
+    try {
+      // Get the container engine connection
+      const connection = await getContainerEngine();
+
+      // Create a temporary directory for the build context
+      tempDir = path.join(this.extensionContext.storagePath, 'build-context-' + Date.now());
+      fs.mkdirSync(tempDir, { recursive: true });
+
+      // Write the Containerfile
+      const containerfilePath = path.join(tempDir, 'Containerfile');
+      fs.writeFileSync(containerfilePath, containerfileContent);
+
+      // Build the image using podman desktop API
+      // Convert architecture format if needed (arm64 -> linux/arm64)
+      let platform: string | undefined;
+      if (arch && (arch === 'arm64' || arch === 'amd64')) {
+        platform = `linux/${arch}`;
+      }
+
+      // Stream build logs - store them for polling
+      await podmanDesktopApi.containerEngine.buildImage(
+        tempDir,
+        (eventName: 'stream' | 'error' | 'finish', data: string) => {
+          if (eventName === 'stream' && data) {
+            // Append log data for polling
+            this.containerBuildLogs += data;
+          } else if (eventName === 'error' && data) {
+            this.containerBuildLogs += `Error: ${data}\n`;
+          }
+        },
+        {
+          containerFile: containerfilePath,
+          tag: imageTag,
+          platform: platform,
+          provider: connection,
+        },
+      );
+
+      telemetryData.success = true;
+    } catch (e) {
+      console.error('Error building container image:', e);
+      telemetryData.error = String(e);
+      throw new Error('Error building container image: ' + e);
+    } finally {
+      // Clean up temp directory
+      if (tempDir) {
+        try {
+          fs.rmSync(tempDir, { recursive: true, force: true });
+        } catch (cleanupError) {
+          console.warn('Failed to clean up temp directory:', cleanupError);
+        }
+      }
+
+      this.telemetryLogger.logUsage('buildContainerImage', telemetryData);
+      // Notify the frontend the images list may have changed
+      await this.notify(Messages.MSG_IMAGE_UPDATE, {});
+    }
+  }
+
+  // Test a bootc image by running it in a container environment
+  // Setup welcome message in container's .bashrc for Shell/Systemd test modes
+  private async setupTestWelcomeMessage(
+    containerName: string,
+    image: string,
+    mode: 'bash' | 'systemd',
+  ): Promise<void> {
+    const modeLabel = mode === 'bash' ? 'Shell Mode' : 'Systemd Mode';
+    const modeDescription =
+      mode === 'bash'
+        ? 'Interactive shell for inspecting packages, configs, and files.'
+        : 'Privileged container with systemd. Some services may not work correctly.';
+
+    const welcomeScript = `
+# bootc test welcome message
+if [ -z "$BOOTC_WELCOME_SHOWN" ]; then
+  export BOOTC_WELCOME_SHOWN=1
+  echo ""
+  echo "  ___________"
+  echo " /          /|"
+  echo "|   (ᵔᴥᵔ)  | |"
+  echo "|   bootc  | |"
+  echo "|__________|/"
+  echo ""
+  echo "=== bootc Test Container ==="
+  echo "Mode: ${modeLabel}"
+  echo "Image: ${image}"
+  echo ""
+  echo "${modeDescription}"
+  echo ""
+  echo "For full VM experience, build a disk image or use bcvk ephemeral VM."
+  echo ""
+fi
+`;
+
+    try {
+      await podmanDesktopApi.process.exec('podman', [
+        'exec',
+        containerName,
+        'bash',
+        '-c',
+        `cat >> /root/.bashrc << 'BOOTC_WELCOME'
+${welcomeScript}
+BOOTC_WELCOME`,
+      ]);
+    } catch (err) {
+      console.warn('Failed to setup welcome message in container:', err);
+      // Non-fatal - container still works without welcome message
+    }
+  }
+
+  // This allows users to quickly test their bootc image without building a full disk image
+  // Mode can be 'bash' (simple shell) or 'systemd' (privileged with /sbin/init)
+  async testBootcImage(image: string, engineId: string, mode: 'bash' | 'systemd' = 'bash'): Promise<void> {
+    // Generate a unique container name based on the image name
+    const imageName = image.split('/').pop()?.split(':')[0] ?? 'bootc';
+    const containerName = `bootc-test-${imageName}-${Date.now()}`;
+
+    try {
+      let options: podmanDesktopApi.ContainerCreateOptions;
+
+      if (mode === 'systemd') {
+        // Systemd mode: privileged container with /sbin/init
+        // Based on https://docs.fedoraproject.org/en-US/bootc/provisioning-container/
+        // Use --privileged -v /sys:/sys:ro to prevent udev from managing devices
+        options = {
+          name: containerName,
+          Image: image,
+          Tty: true,
+          OpenStdin: true,
+          Cmd: ['/sbin/init'],
+          HostConfig: {
+            Privileged: true,
+            Binds: ['/sys:/sys:ro'],
+          },
+        };
+      } else {
+        // Bash mode: simple interactive shell for inspection
+        options = {
+          name: containerName,
+          Image: image,
+          Tty: true,
+          OpenStdin: true,
+          Cmd: ['/bin/bash'],
+        };
+      }
+
+      const result = await podmanDesktopApi.containerEngine.createContainer(engineId, options);
+
+      // Wait for container to be running before navigating to terminal
+      await this.waitForContainerRunning(result.id);
+
+      // Setup welcome message in container
+      await this.setupTestWelcomeMessage(containerName, image, mode);
+
+      // Add a delay to allow UI to fully initialize before navigation
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Navigate to the container terminal in Podman Desktop
+      await podmanDesktopApi.navigation.navigateToContainerTerminal(result.id);
+
+      this.telemetryLogger.logUsage('testBootcImage', { mode });
+    } catch (err) {
+      await podmanDesktopApi.window.showErrorMessage(`Error testing bootc image: ${err}`);
+      console.error('Error testing bootc image: ', err);
+      throw err;
+    }
+  }
+
+  // Wait for a container to be in running state
+  private async waitForContainerRunning(containerId: string, timeoutMs: number = 30000): Promise<void> {
+    const startTime = Date.now();
+    const pollInterval = 500; // Check every 500ms
+
+    while (Date.now() - startTime < timeoutMs) {
+      const containers = await podmanDesktopApi.containerEngine.listContainers();
+      const container = containers.find(c => c.Id === containerId);
+
+      if (container && container.State === 'running') {
+        return;
+      }
+
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+    }
+
+    throw new Error('Timeout waiting for container to start');
+  }
+
+  // bcvk (Bootc Virtualization Kit) methods
+
+  // Check if bcvk is supported on the current platform
+  async isBcvkSupported(): Promise<boolean> {
+    return this.bcvkHandler.isSupportedPlatform();
+  }
+
+  // Get bcvk binary info if installed
+  async getBcvkBinaryInfo(): Promise<BcvkBinaryInfo | undefined> {
+    return this.bcvkHandler.getBinaryInfo();
+  }
+
+  // Install bcvk binary
+  async installBcvk(): Promise<void> {
+    await this.bcvkHandler.install();
+    this.telemetryLogger.logUsage('bcvk.install');
+  }
+
+  // Launch a bcvk ephemeral VM and navigate to its terminal
+  // The terminal will auto-SSH into the VM
+  async launchBcvkEphemeralVM(image: string): Promise<string> {
+    try {
+      // Ensure bcvk is initialized
+      await this.bcvkHandler.init();
+
+      if (!this.bcvkHandler.isAvailable()) {
+        throw new Error('bcvk is not installed. Please install it first.');
+      }
+
+      // Run bcvk ephemeral which creates a container running the VM
+      const containerName = await this.bcvkHandler.runEphemeralVM(image);
+
+      // Find the container by name to verify it was created
+      const containers = await podmanDesktopApi.containerEngine.listContainers();
+      const container = containers.find(c => c.Names.some(n => n.includes(containerName)));
+
+      if (!container) {
+        throw new Error(`Could not find container created by bcvk: ${containerName}`);
+      }
+
+      // Wait for container to be running
+      await this.waitForContainerRunning(container.Id);
+
+      // Setup auto-SSH in the container's .bashrc
+      // This makes the terminal automatically wait for and SSH into the VM
+      await this.bcvkHandler.setupAutoSsh(containerName);
+
+      // Small delay to ensure setup is complete
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Navigate to the container terminal in Podman Desktop
+      // The terminal will automatically SSH into the VM
+      await podmanDesktopApi.navigation.navigateToContainerTerminal(container.Id);
+
+      this.telemetryLogger.logUsage('launchBcvkEphemeralVM', { success: true });
+
+      return containerName;
+    } catch (err) {
+      console.error('Error launching bcvk ephemeral VM: ', err);
+      this.telemetryLogger.logError('launchBcvkEphemeralVM', { error: String(err) });
+      throw err;
+    }
   }
 
   // The API does not allow callbacks through the RPC, so instead

@@ -65,6 +65,11 @@ const groups = $derived.by(() => {
   <div class="flex flex-col min-w-full min-h-full">
     <div class="min-w-full min-h-full flex-1">
       <div class="px-5 space-y-5">
+        <!-- Subtitle -->
+        <p class="text-sm text-[var(--pd-content-card-text)]">
+          Pre-built bootable container images ready to pull and build into disk images. Each example demonstrates different use cases like web servers, networking tools, and system utilities.
+        </p>
+
         {#each groups.entries() as [category, examples] (category.id)}
           <ExamplesCard {category} {examples} />
         {/each}

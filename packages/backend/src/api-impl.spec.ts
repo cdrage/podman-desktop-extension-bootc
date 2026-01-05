@@ -40,10 +40,18 @@ vi.mock(
         listImages: vi.fn(),
         listContainers: vi.fn(),
         deleteImage: vi.fn(),
+        createContainer: vi.fn(),
+      },
+      navigation: {
+        navigateToContainerTerminal: vi.fn(),
+        navigateToContainer: vi.fn(),
       },
       env: {
         openExternal: vi.fn(),
         createTelemetryLogger: vi.fn(),
+        clipboard: {
+          writeText: vi.fn(),
+        },
       },
     }) as unknown as typeof podmanDesktopApi,
 );
@@ -176,4 +184,73 @@ test('selectVMImageFile should call the extension api', async () => {
   await apiImpl.selectVMImageFile();
 
   expect(podmanDesktopApi.window.showOpenDialog).toHaveBeenCalled();
+});
+
+test('testBootcImage with bash mode should create container with bash command', async () => {
+  const containerId = 'test-container-id';
+  vi.mocked(podmanDesktopApi.containerEngine.createContainer).mockResolvedValue({
+    id: containerId,
+    engineId: 'podman-engine',
+  });
+  vi.mocked(podmanDesktopApi.containerEngine.listContainers).mockResolvedValue([
+    { Id: containerId, State: 'running' } as unknown as podmanDesktopApi.ContainerInfo,
+  ]);
+
+  const apiImpl = createAPI();
+
+  await apiImpl.testBootcImage('quay.io/test/image:latest', 'podman-engine', 'bash');
+
+  expect(podmanDesktopApi.containerEngine.createContainer).toHaveBeenCalledWith(
+    'podman-engine',
+    expect.objectContaining({
+      Image: 'quay.io/test/image:latest',
+      Tty: true,
+      OpenStdin: true,
+      Cmd: ['/bin/bash'],
+    }),
+  );
+  expect(podmanDesktopApi.navigation.navigateToContainerTerminal).toHaveBeenCalledWith(containerId);
+});
+
+test('testBootcImage with systemd mode should create privileged container with /sbin/init', async () => {
+  const containerId = 'test-container-id';
+  vi.mocked(podmanDesktopApi.containerEngine.createContainer).mockResolvedValue({
+    id: containerId,
+    engineId: 'podman-engine',
+  });
+  vi.mocked(podmanDesktopApi.containerEngine.listContainers).mockResolvedValue([
+    { Id: containerId, State: 'running' } as unknown as podmanDesktopApi.ContainerInfo,
+  ]);
+
+  const apiImpl = createAPI();
+
+  await apiImpl.testBootcImage('quay.io/test/image:latest', 'podman-engine', 'systemd');
+
+  expect(podmanDesktopApi.containerEngine.createContainer).toHaveBeenCalledWith(
+    'podman-engine',
+    expect.objectContaining({
+      Image: 'quay.io/test/image:latest',
+      Tty: true,
+      OpenStdin: true,
+      Cmd: ['/sbin/init'],
+      HostConfig: {
+        Privileged: true,
+        Binds: ['/sys:/sys:ro'],
+      },
+    }),
+  );
+  expect(podmanDesktopApi.navigation.navigateToContainerTerminal).toHaveBeenCalledWith(containerId);
+});
+
+test('testBootcImage should show error message on failure', async () => {
+  const error = new Error('Container creation failed');
+  vi.mocked(podmanDesktopApi.containerEngine.createContainer).mockRejectedValue(error);
+
+  const apiImpl = createAPI();
+
+  await expect(apiImpl.testBootcImage('quay.io/test/image:latest', 'podman-engine', 'bash')).rejects.toThrow(error);
+
+  expect(podmanDesktopApi.window.showErrorMessage).toHaveBeenCalledWith(
+    expect.stringContaining('Error testing bootc image'),
+  );
 });

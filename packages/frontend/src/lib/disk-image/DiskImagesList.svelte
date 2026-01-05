@@ -145,25 +145,27 @@ const row = new TableRow<BootcBuildInfoUI>({
   {/snippet}
 
   {#snippet content()}
-  <div class="flex min-w-full h-full">
-    <Table
-      kind="disk images"
-      bind:this={table}
-      bind:selectedItemsNumber={selectedItemsNumber}
-      data={history}
-      columns={columns}
-      row={row}
-      defaultSortColumn="Name"
-      on:update={(): void => {
-        history = history;
-      }}>
-    </Table>
+  <div class="flex flex-col min-w-full h-full">
+    <div class="flex min-w-full flex-1">
+      <Table
+        kind="disk images"
+        bind:this={table}
+        bind:selectedItemsNumber={selectedItemsNumber}
+        data={history}
+        columns={columns}
+        row={row}
+        defaultSortColumn="Name"
+        on:update={(): void => {
+          history = history;
+        }}>
+      </Table>
 
-    {#if $filtered.length === 0 && searchTerm}
-      <FilteredEmptyScreen icon={DiskImageIcon} kind="disk images" bind:searchTerm={searchTerm} />
-    {:else if history.length === 0}
-      <DiskImageEmptyScreen />
-    {/if}
+      {#if $filtered.length === 0 && searchTerm}
+        <FilteredEmptyScreen icon={DiskImageIcon} kind="disk images" bind:searchTerm={searchTerm} />
+      {:else if history.length === 0}
+        <DiskImageEmptyScreen />
+      {/if}
+    </div>
   </div>
   {/snippet}
 </NavPage>

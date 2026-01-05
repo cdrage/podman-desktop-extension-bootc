@@ -15,6 +15,8 @@ import Dashboard from './lib/dashboard/Dashboard.svelte';
 import ExampleDetails from './lib/examples/ExampleDetails.svelte';
 import ImagesList from './lib/images/ImagesList.svelte';
 import CreateVM from './CreateVM.svelte';
+import Onboarding from './Onboarding.svelte';
+import TestImage from './TestImage.svelte';
 
 router.mode.hash();
 
@@ -50,8 +52,17 @@ onMount(() => {
       <Route path="/images/" breadcrumb="Images">
         <ImagesList />
       </Route>
+      <Route path="/images/test/:name/:tag/:engineId" breadcrumb="Test Image" let:meta>
+        <TestImage
+          imageName={decodeURIComponent(meta.params.name)}
+          imageTag={decodeURIComponent(meta.params.tag)}
+          engineId={decodeURIComponent(meta.params.engineId)} />
+      </Route>
       <Route path="/disk-images/" breadcrumb="Disk Images">
         <DiskImagesList />
+      </Route>
+      <Route path="/onboarding" breadcrumb="Create Bootable Container">
+        <Onboarding />
       </Route>
       <Route path="/disk-image/:id/*" breadcrumb="Disk Image Details" let:meta>
         <DiskImageDetails id={meta.params.id} />

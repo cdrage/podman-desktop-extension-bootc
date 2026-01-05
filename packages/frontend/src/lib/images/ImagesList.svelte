@@ -23,7 +23,8 @@ import { filesize } from 'filesize';
 import { bootcClient } from '/@/api/client';
 import type { ContainerInfo } from '@podman-desktop/api';
 import type { Unsubscriber } from 'svelte/store';
-import { faTrash } from '@fortawesome/free-solid-svg-icons';
+import { faTrash, faWandMagicSparkles } from '@fortawesome/free-solid-svg-icons';
+import { gotoOnboarding } from '../navigation';
 
 interface Props {
   searchTerm?: string;
@@ -119,7 +120,11 @@ const row = new TableRow<ImageInfoUI>({
 });
 </script>
 
-<NavPage bind:searchTerm={searchTerm} title="images">
+<NavPage bind:searchTerm={searchTerm} title="images" searchEnabled={true}>
+  {#snippet additionalActions()}
+    <Button on:click={gotoOnboarding} icon={faWandMagicSparkles} title="Interactive Build">Interactive Build</Button>
+  {/snippet}
+
   {#snippet bottomAdditionalActions()}
     {#if selectedItemsNumber > 0}
      <Button
@@ -132,24 +137,26 @@ const row = new TableRow<ImageInfoUI>({
   {/snippet}
 
   {#snippet content()}
-  <div class="flex min-w-full h-full">
-    <Table
-      kind="image"
-      bind:this={table}
-      bind:selectedItemsNumber={selectedItemsNumber}
-      data={images}
-      columns={columns}
-      row={row}
-      defaultSortColumn="Name">
-    </Table>
+  <div class="flex flex-col min-w-full h-full">
+    <div class="flex min-w-full flex-1">
+      <Table
+        kind="image"
+        bind:this={table}
+        bind:selectedItemsNumber={selectedItemsNumber}
+        data={images}
+        columns={columns}
+        row={row}
+        defaultSortColumn="Name">
+      </Table>
 
-    {#if $filtered.length === 0}
-      {#if searchTerm}
-        <FilteredEmptyScreen icon={BootcImageIcon} kind="images" bind:searchTerm={searchTerm} />
-      {:else}
-        <ImageEmptyScreen />
+      {#if $filtered.length === 0}
+        {#if searchTerm}
+          <FilteredEmptyScreen icon={BootcImageIcon} kind="images" bind:searchTerm={searchTerm} />
+        {:else}
+          <ImageEmptyScreen />
+        {/if}
       {/if}
-    {/if}
+    </div>
   </div>
   {/snippet}
 </NavPage>

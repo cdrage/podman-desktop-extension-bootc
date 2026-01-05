@@ -24,3 +24,20 @@ export const bootcImageBuilderCentos =
 export const bootcImageBuilderRHEL9 = 'registry.redhat.io/rhel9/bootc-image-builder:9.7';
 export const bootcImageBuilderRHEL10 = 'registry.redhat.io/rhel10/bootc-image-builder:10.1';
 export const macadamName = 'bootc';
+
+// bcvk (Bootc Virtualization Kit) related constants
+export const BCVK_BINARY_NAME = 'bcvk';
+export const BCVK_GITHUB_OWNER = 'bootc-dev';
+export const BCVK_GITHUB_REPO = 'bcvk';
+export const BCVK_DISPLAY_NAME = 'bcvk';
+export const BCVK_DESCRIPTION = 'Bootc Virtualization Kit - Launch ephemeral VMs from bootc containers';
+
+// Platform support for bcvk - currently only Linux x86_64
+// Maps Node.js os.platform()-os.arch() to GitHub release asset names
+export const BCVK_SUPPORTED_PLATFORMS: Record<string, string> = {
+  'linux-x64': 'bcvk-x86_64-unknown-linux-gnu.tar.gz',
+  // Future platforms can be added here when bcvk releases them:
+  // 'linux-arm64': 'bcvk-aarch64-unknown-linux-gnu.tar.gz',
+  // 'darwin-x64': 'bcvk-x86_64-apple-darwin.tar.gz',
+  // 'darwin-arm64': 'bcvk-aarch64-apple-darwin.tar.gz',
+};

@@ -1,0 +1,146 @@
+{
+  "baseImages": [
+    {
+      "id": "centos-stream9",
+      "name": "CentOS Stream 9",
+      "description": "CentOS Stream 9 - Continuously delivered Linux distribution",
+      "image": "quay.io/centos-bootc/centos-bootc",
+      "tag": "stream9"
+    },
+    {
+      "id": "centos-stream10",
+      "name": "CentOS Stream 10",
+      "description": "CentOS Stream 10 - Latest continuously delivered Linux distribution",
+      "image": "quay.io/centos-bootc/centos-bootc",
+      "tag": "stream10"
+    },
+    {
+      "id": "fedora-42",
+      "name": "Fedora 42",
+      "description": "Fedora 42 - Community-driven Linux distribution",
+      "image": "quay.io/fedora/fedora-bootc",
+      "tag": "42"
+    },
+    {
+      "id": "fedora-43",
+      "name": "Fedora 43",
+      "description": "Fedora 43 - Community-driven Linux distribution",
+      "image": "quay.io/fedora/fedora-bootc",
+      "tag": "43"
+    },
+    {
+      "id": "fedora-44",
+      "name": "Fedora 44",
+      "description": "Fedora 44 - Latest Fedora release",
+      "image": "quay.io/fedora/fedora-bootc",
+      "tag": "44"
+    },
+    {
+      "id": "rhel-9",
+      "name": "RHEL 9",
+      "description": "Red Hat Enterprise Linux 9 (requires subscription)",
+      "image": "registry.redhat.io/rhel9/rhel-bootc",
+      "tag": "latest"
+    },
+    {
+      "id": "rhel-10",
+      "name": "RHEL 10",
+      "description": "Red Hat Enterprise Linux 10 (requires subscription)",
+      "image": "registry.redhat.io/rhel10/rhel-bootc",
+      "tag": "latest"
+    }
+  ],
+  "examples": [
+    {
+      "id": "minimal",
+      "name": "Minimal",
+      "description": "Minimal base image with root password for testing",
+      "category": "Getting Started",
+      "containerfile": "# Minimal bootc image with root login enabled\n# WARNING: This is for testing only - do not use in production!\nRUN echo \"root:root\" | chpasswd"
+    },
+    {
+      "id": "httpd",
+      "name": "Apache Web Server",
+      "description": "Run an Apache (httpd) web server",
+      "category": "Web Servers",
+      "containerfile": "# Install and configure Apache web server\nRUN dnf -y install httpd && \\\n    systemctl enable httpd && \\\n    mv /var/www /usr/share/www && \\\n    sed -ie 's,/var/www,/usr/share/www,' /etc/httpd/conf/httpd.conf && \\\n    rm /usr/share/httpd/noindex -rf && \\\n    echo '<html><body><h1>Hello from Bootc!</h1></body></html>' > /usr/share/www/html/index.html\n\nEXPOSE 80"
+    },
+    {
+      "id": "tailscale",
+      "name": "Tailscale VPN",
+      "description": "Install Tailscale VPN agent for secure networking",
+      "category": "Networking",
+      "containerfile": "# Install Tailscale VPN\n# Note: After boot, run 'tailscale up' to authenticate\nRUN dnf config-manager --add-repo https://pkgs.tailscale.com/stable/centos/9/tailscale.repo && \\\n    dnf -y install tailscale && \\\n    dnf clean all && \\\n    ln -s ../tailscaled.service /usr/lib/systemd/system/default.target.wants"
+    },
+    {
+      "id": "qemu-guest-agent",
+      "name": "QEMU Guest Agent",
+      "description": "Install QEMU guest agent for VM management",
+      "category": "Virtualization",
+      "containerfile": "# Install QEMU guest agent for better VM integration\nRUN dnf -y install qemu-guest-agent && \\\n    dnf clean all && \\\n    systemctl enable qemu-guest-agent"
+    },
+    {
+      "id": "vmware",
+      "name": "VMware Tools",
+      "description": "Install open-vm-tools for VMware compatibility",
+      "category": "Virtualization",
+      "containerfile": "# Install VMware Tools for VMware/vSphere compatibility\nRUN dnf -y install open-vm-tools && \\\n    dnf clean all && \\\n    systemctl enable vmtoolsd.service"
+    },
+    {
+      "id": "cloud-init",
+      "name": "Cloud-Init",
+      "description": "Enable cloud-init for AWS, KubeVirt, and other cloud platforms",
+      "category": "Cloud",
+      "containerfile": "# Install cloud-init for cloud deployments (AWS, GCP, Azure, etc.)\nRUN dnf -y install cloud-init && \\\n    ln -s ../cloud-init.target /usr/lib/systemd/system/default.target.wants && \\\n    rm -rf /var/{cache,log} /var/lib/{dnf,rhsm}"
+    },
+    {
+      "id": "docker",
+      "name": "Docker Engine",
+      "description": "Install Docker CE with compose and buildx plugins",
+      "category": "Containers",
+      "containerfile": "# Install Docker CE with compose and buildx\n# See: https://docs.docker.com/engine/install/centos/\nRUN dnf install -y yum-utils && \\\n    dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo && \\\n    dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin && \\\n    dnf clean all && \\\n    systemctl enable docker"
+    },
+    {
+      "id": "wifi",
+      "name": "WiFi Support",
+      "description": "Enable wireless networking support",
+      "category": "Networking",
+      "containerfile": "# Install WiFi and wireless networking support\nRUN dnf -y install NetworkManager-wifi NetworkManager-wwan wpa_supplicant wireless-regdb && \\\n    dnf clean all"
+    },
+    {
+      "id": "development",
+      "name": "Development Tools",
+      "description": "Common development tools (git, vim, tmux, etc.)",
+      "category": "Development",
+      "containerfile": "# Install common development tools\nRUN dnf -y install git vim tmux htop curl wget make gcc && \\\n    dnf clean all"
+    },
+    {
+      "id": "cockpit",
+      "name": "Cockpit Web Console",
+      "description": "Web-based server management interface",
+      "category": "Management",
+      "containerfile": "# Install Cockpit web console for server management\nRUN dnf -y install cockpit cockpit-storaged cockpit-podman && \\\n    dnf clean all && \\\n    systemctl enable cockpit.socket\n\nEXPOSE 9090"
+    },
+    {
+      "id": "ssh-key",
+      "name": "SSH Key Authentication",
+      "description": "Configure SSH with your public key",
+      "category": "Security",
+      "containerfile": "# Configure SSH key authentication\n# Replace the key below with your actual public key\nRUN mkdir -p /root/.ssh && \\\n    echo 'ssh-ed25519 YOUR_PUBLIC_KEY_HERE user@host' >> /root/.ssh/authorized_keys && \\\n    chmod 700 /root/.ssh && \\\n    chmod 600 /root/.ssh/authorized_keys"
+    },
+    {
+      "id": "nginx",
+      "name": "Nginx Web Server",
+      "description": "Run an Nginx web server",
+      "category": "Web Servers",
+      "containerfile": "# Install and configure Nginx web server\nRUN dnf -y install nginx && \\\n    systemctl enable nginx && \\\n    echo '<html><body><h1>Hello from Bootc!</h1></body></html>' > /usr/share/nginx/html/index.html\n\nEXPOSE 80"
+    },
+    {
+      "id": "podman",
+      "name": "Podman Container Engine",
+      "description": "Install Podman for running containers",
+      "category": "Containers",
+      "containerfile": "# Install Podman container engine\nRUN dnf -y install podman podman-compose && \\\n    dnf clean all"
+    }
+  ]
+}

@@ -31,8 +31,9 @@ import { isHyperVEnabled, isWSLEnabled } from './macadam/win/utils';
 import { getErrorMessage, verifyContainerProivder } from './macadam/utils';
 import { LoggerDelegator } from './macadam/logger';
 import { ProviderConnectionShellAccessImpl } from './macadam/macadam-machine-stream';
-import { macadamName } from './constants';
-import { isWindows } from './machine-utils';
+import { macadamName, BCVK_BINARY_NAME, BCVK_DISPLAY_NAME, BCVK_DESCRIPTION } from './constants';
+import { isWindows, isLinux } from './machine-utils';
+import { BcvkHandler } from './bcvk';
 
 export const telemetryLogger = extensionApi.env.createTelemetryLogger();
 
@@ -48,6 +49,11 @@ let wslAndHypervEnabledContextValue = false;
 const WSL_HYPERV_ENABLED_KEY = 'macadam.wslHypervEnabled';
 
 const listeners = new Set<StatusHandler>();
+
+// bcvk CLI tool related
+let bcvkHandler: BcvkHandler | undefined;
+let bcvkCliTool: extensionApi.CliTool | undefined;
+let bcvkCliToolUpdaterDisposable: extensionApi.Disposable | undefined;
 
 export interface BinaryInfo {
   path: string;
@@ -189,6 +195,131 @@ export async function activate(extensionContext: ExtensionContext): Promise<void
     monitorMachines(provider, extensionContext).catch((error: unknown) => {
       console.error('Error while monitoring machines', error);
     });
+  }
+
+  // Register bcvk CLI tool (only on Linux currently)
+  if (isLinux()) {
+    await registerBcvkCliTool(extensionContext);
+  }
+}
+
+// Register bcvk as a CLI tool with Podman Desktop
+async function registerBcvkCliTool(extensionContext: extensionApi.ExtensionContext): Promise<void> {
+  bcvkHandler = new BcvkHandler(extensionContext, telemetryLogger);
+
+  try {
+    await bcvkHandler.init();
+
+    const binaryInfo = await bcvkHandler.getBinaryInfo();
+
+    // Images for the CLI tool (using the extension icon)
+    const bcvkImages = {
+      icon: './icon.png',
+    };
+
+    if (binaryInfo) {
+      // bcvk is already installed, register it
+      bcvkCliTool = extensionApi.cli.createCliTool({
+        name: BCVK_BINARY_NAME,
+        displayName: BCVK_DISPLAY_NAME,
+        markdownDescription: BCVK_DESCRIPTION,
+        images: bcvkImages,
+        version: binaryInfo.version,
+        path: binaryInfo.path,
+        installationSource: binaryInfo.installationSource,
+      });
+      extensionContext.subscriptions.push(bcvkCliTool);
+
+      // Register update checker
+      await checkForBcvkUpdates();
+    } else {
+      // bcvk is not installed, register with installer
+      bcvkCliTool = extensionApi.cli.createCliTool({
+        name: BCVK_BINARY_NAME,
+        displayName: BCVK_DISPLAY_NAME,
+        markdownDescription: BCVK_DESCRIPTION,
+        images: bcvkImages,
+        installationSource: 'extension',
+      });
+      extensionContext.subscriptions.push(bcvkCliTool);
+    }
+
+    // Register installer for bcvk
+    bcvkCliTool.registerInstaller({
+      selectVersion: async (): Promise<string> => {
+        // For now, we just install the latest version
+        const bcvkDownload = bcvkHandler!.getBcvkDownload();
+        const latestRelease = await bcvkDownload.getLatestRelease();
+        return latestRelease?.tag ?? 'latest';
+      },
+      doInstall: async (_logger: extensionApi.Logger): Promise<void> => {
+        await bcvkHandler!.install();
+        const newBinaryInfo = await bcvkHandler!.getBinaryInfo();
+        if (newBinaryInfo && bcvkCliTool) {
+          bcvkCliTool.updateVersion({
+            version: newBinaryInfo.version,
+            path: newBinaryInfo.path,
+            installationSource: 'extension',
+          });
+        }
+      },
+      doUninstall: async (_logger: extensionApi.Logger): Promise<void> => {
+        await bcvkHandler!.uninstall();
+        if (bcvkCliTool) {
+          bcvkCliTool.updateVersion({
+            version: 'not installed',
+            path: '',
+            installationSource: 'extension',
+          });
+        }
+      },
+    });
+  } catch (error) {
+    console.error('Error registering bcvk CLI tool:', error);
+  }
+}
+
+// Check for bcvk updates
+async function checkForBcvkUpdates(): Promise<void> {
+  if (!bcvkHandler || !bcvkCliTool) {
+    return;
+  }
+
+  try {
+    const bcvkDownload = bcvkHandler.getBcvkDownload();
+    const latestRelease = await bcvkDownload.getLatestRelease();
+    const currentInfo = await bcvkHandler.getBinaryInfo();
+
+    if (!latestRelease || !currentInfo) {
+      return;
+    }
+
+    // Compare versions (strip 'v' prefix if present)
+    const latestVersion = latestRelease.tag.replace(/^v/, '');
+    const currentVersion = currentInfo.version;
+
+    if (latestVersion !== currentVersion && currentVersion !== 'unknown') {
+      // Register an update
+      bcvkCliToolUpdaterDisposable = bcvkCliTool.registerUpdate({
+        version: latestVersion,
+        doUpdate: async (_logger: extensionApi.Logger): Promise<void> => {
+          // Uninstall old version and install new
+          await bcvkHandler!.uninstall();
+          await bcvkHandler!.install();
+          const newBinaryInfo = await bcvkHandler!.getBinaryInfo();
+          if (newBinaryInfo && bcvkCliTool) {
+            bcvkCliTool.updateVersion({
+              version: newBinaryInfo.version,
+              path: newBinaryInfo.path,
+              installationSource: 'extension',
+            });
+          }
+          bcvkCliToolUpdaterDisposable?.dispose();
+        },
+      });
+    }
+  } catch (error) {
+    console.error('Error checking for bcvk updates:', error);
   }
 }
 
