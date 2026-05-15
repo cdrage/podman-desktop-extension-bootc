@@ -20,6 +20,13 @@ import type { BootcBuildInfo, BuildType } from './models/bootc';
 import type { ImageInfo, ImageInspectInfo, ManifestInspectInfo, ContainerInfo } from '@podman-desktop/api';
 import type { ExamplesList } from './models/examples';
 import type { CreateVmOptions, VmDetails } from '@crc-org/macadam.js';
+import type { BaseImage, ContainerfileExample } from './models/baseImages';
+
+export interface BuildContainerImageOptions {
+  imageTag: string;
+  containerfileContent: string;
+  arch?: string;
+}
 
 export abstract class BootcApi {
   static readonly CHANNEL: string = 'BootcApi';
@@ -62,4 +69,10 @@ export abstract class BootcApi {
   abstract stopCurrentVM(): Promise<void>;
   abstract telemetryLogUsage(eventName: string, data?: Record<string, unknown> | undefined): Promise<void>;
   abstract telemetryLogError(eventName: string, data?: Record<string, unknown> | undefined): Promise<void>;
+  abstract getBaseImages(): Promise<BaseImage[]>;
+  abstract getContainerfileExamples(): Promise<ContainerfileExample[]>;
+  abstract buildContainerImage(options: BuildContainerImageOptions): Promise<void>;
+  abstract getContainerBuildLogs(): Promise<string>;
+  abstract clearContainerBuildLogs(): Promise<void>;
+  abstract cancelContainerBuild(): Promise<void>;
 }

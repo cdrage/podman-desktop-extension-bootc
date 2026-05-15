@@ -26,6 +26,7 @@ import ImagesList from './ImagesList.svelte';
 import type { Subscriber } from '/@shared/src/messages/MessageProxy';
 import { bootcClient } from '/@/api/client';
 import userEvent from '@testing-library/user-event';
+import { gotoOnboarding } from '../navigation';
 
 vi.mock('/@/api/client', async () => {
   return {
@@ -33,7 +34,6 @@ vi.mock('/@/api/client', async () => {
       listBootcImages: vi.fn(),
       listContainers: vi.fn(),
       deleteImage: vi.fn(),
-      openImageBuild: vi.fn(),
       telemetryLogUsage: vi.fn(),
     },
     rpcBrowser: {
@@ -45,6 +45,12 @@ vi.mock('/@/api/client', async () => {
     },
   };
 });
+
+vi.mock('../navigation', () => ({
+  gotoOnboarding: vi.fn(),
+  goToDiskImages: vi.fn(),
+  goToImages: vi.fn(),
+}));
 
 test('Expect no images', async () => {
   vi.mocked(bootcClient.listBootcImages).mockResolvedValue([]);
@@ -114,9 +120,9 @@ test('Test clicking on build button', async () => {
   vi.mocked(bootcClient.listBootcImages).mockResolvedValue([]);
   render(ImagesList);
 
-  const build = screen.getAllByRole('button', { name: 'Build' })[0];
+  const build = screen.getByRole('button', { name: 'Interactive Build' });
   expect(build).toBeInTheDocument();
   await userEvent.click(build);
 
-  expect(bootcClient.openImageBuild).toHaveBeenCalled();
+  expect(gotoOnboarding).toHaveBeenCalled();
 });

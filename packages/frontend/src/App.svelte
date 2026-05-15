@@ -15,6 +15,7 @@ import Dashboard from './lib/dashboard/Dashboard.svelte';
 import ExampleDetails from './lib/examples/ExampleDetails.svelte';
 import ImagesList from './lib/images/ImagesList.svelte';
 import CreateVM from './CreateVM.svelte';
+import Onboarding from './Onboarding.svelte';
 
 router.mode.hash();
 
@@ -49,6 +50,9 @@ onMount(() => {
       </Route>
       <Route path="/images/" breadcrumb="Images">
         <ImagesList />
+      </Route>
+      <Route path="/onboarding" breadcrumb="Create Bootable Container">
+        <Onboarding />
       </Route>
       <Route path="/disk-images/" breadcrumb="Disk Images">
         <DiskImagesList />

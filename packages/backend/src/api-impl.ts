@@ -19,8 +19,14 @@
 import * as podmanDesktopApi from '@podman-desktop/api';
 import type { CreateVmOptions, VmDetails } from '@crc-org/macadam.js';
 import type { ImageInfo, ContainerInfo } from '@podman-desktop/api';
-import type { BootcApi } from '/@shared/src/BootcAPI';
+import type { BootcApi, BuildContainerImageOptions } from '/@shared/src/BootcAPI';
 import type { BootcBuildInfo, BuildType } from '/@shared/src/models/bootc';
+import {
+  BASE_IMAGES,
+  CONTAINERFILE_EXAMPLES,
+  type BaseImage,
+  type ContainerfileExample,
+} from '/@shared/src/models/baseImages';
 import { buildDiskImage, buildExists } from './build-disk-image';
 import { History } from './history';
 import * as containerUtils from './container-utils';
@@ -38,6 +44,8 @@ export class BootcApiImpl implements BootcApi {
   static readonly CHANNEL: string = 'BootcApi';
   private history: History;
   private webview: podmanDesktopApi.Webview;
+  private containerBuildLogs: string = '';
+  private containerBuildCancelled: boolean = false;
 
   constructor(
     private readonly extensionContext: podmanDesktopApi.ExtensionContext,
@@ -46,6 +54,24 @@ export class BootcApiImpl implements BootcApi {
   ) {
     this.history = new History(extensionContext.storagePath);
     this.webview = webview;
+  }
+
+  // Get the current container build logs (for polling)
+  async getContainerBuildLogs(): Promise<string> {
+    return this.containerBuildLogs;
+  }
+
+  // Clear container build logs
+  async clearContainerBuildLogs(): Promise<void> {
+    this.containerBuildLogs = '';
+    this.containerBuildCancelled = false;
+  }
+
+  // Cancel the current container build
+  async cancelContainerBuild(): Promise<void> {
+    this.containerBuildCancelled = true;
+    this.containerBuildLogs += '\n--- Build cancelled by user ---\n';
+    this.telemetryLogger.logUsage('buildContainerImage-cancelled', {});
   }
 
   async getExamples(): Promise<ExamplesList> {
@@ -436,6 +462,82 @@ export class BootcApiImpl implements BootcApi {
   // Read from the podman desktop clipboard
   async readFromClipboard(): Promise<string> {
     return podmanDesktopApi.env.clipboard.readText();
+  }
+
+  // Get the list of available base images for the onboarding wizard
+  async getBaseImages(): Promise<BaseImage[]> {
+    return BASE_IMAGES;
+  }
+
+  async getContainerfileExamples(): Promise<ContainerfileExample[]> {
+    return CONTAINERFILE_EXAMPLES;
+  }
+
+  // Build a container image from a Containerfile content
+  async buildContainerImage(options: BuildContainerImageOptions): Promise<void> {
+    const { imageTag, containerfileContent, arch } = options;
+    const telemetryData: Record<string, unknown> = {};
+    telemetryData.imageTag = imageTag;
+
+    let tempDir: string | undefined;
+
+    try {
+      // Get the container engine connection
+      const connection = await getContainerEngine();
+
+      // Create a temporary directory for the build context
+      tempDir = path.join(this.extensionContext.storagePath, 'build-context-' + Date.now());
+      fs.mkdirSync(tempDir, { recursive: true });
+
+      // Write the Containerfile
+      const containerfilePath = path.join(tempDir, 'Containerfile');
+      fs.writeFileSync(containerfilePath, containerfileContent);
+
+      // Build the image using podman desktop API
+      // Convert architecture format if needed (arm64 -> linux/arm64)
+      let platform: string | undefined;
+      if (arch && (arch === 'arm64' || arch === 'amd64')) {
+        platform = `linux/${arch}`;
+      }
+
+      // Stream build logs - store them for polling
+      await podmanDesktopApi.containerEngine.buildImage(
+        tempDir,
+        (eventName: 'stream' | 'error' | 'finish', data: string) => {
+          if (eventName === 'stream' && data) {
+            // Append log data for polling
+            this.containerBuildLogs += data;
+          } else if (eventName === 'error' && data) {
+            this.containerBuildLogs += `Error: ${data}\n`;
+          }
+        },
+        {
+          containerFile: containerfilePath,
+          tag: imageTag,
+          platform: platform,
+          provider: connection,
+        },
+      );
+
+      telemetryData.success = true;
+    } catch (e) {
+      console.error('Error building container image:', e);
+      telemetryData.error = String(e);
+      throw new Error('Error building container image: ' + e);
+    } finally {
+      // Clean up temp directory
+      if (tempDir) {
+        try {
+          fs.rmSync(tempDir, { recursive: true, force: true });
+        } catch (cleanupError) {
+          console.warn('Failed to clean up temp directory:', cleanupError);
+        }
+      }
+
+      this.telemetryLogger.logUsage('buildContainerImage', telemetryData);
+      // Notify the frontend the images list may have changed
+      await this.notify(Messages.MSG_IMAGE_UPDATE, {});
+    }
   }
 
   // The API does not allow callbacks through the RPC, so instead

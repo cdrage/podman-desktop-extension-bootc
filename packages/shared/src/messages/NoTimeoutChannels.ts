@@ -28,4 +28,5 @@ export const noTimeoutChannels: string[] = [
   getChannel(BootcApi, 'selectVMImageFile'),
   getChannel(BootcApi, 'createVM'),
   getChannel(BootcApi, 'listVMs'),
+  getChannel(BootcApi, 'buildContainerImage'),
 ];
