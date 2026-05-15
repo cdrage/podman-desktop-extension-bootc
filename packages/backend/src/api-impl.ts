@@ -438,6 +438,126 @@ export class BootcApiImpl implements BootcApi {
     return podmanDesktopApi.env.clipboard.readText();
   }
 
+  // Test a bootc image by running it in a container environment
+  // Setup welcome message in container's .bashrc for Shell/Systemd test modes
+  private async setupTestWelcomeMessage(containerName: string, image: string, mode: 'bash' | 'systemd'): Promise<void> {
+    const modeLabel = mode === 'bash' ? 'Shell Mode' : 'Systemd Mode';
+    const modeDescription =
+      mode === 'bash'
+        ? 'Interactive shell for inspecting packages, configs, and files.'
+        : 'Privileged container with systemd. Some services may not work correctly.';
+
+    const welcomeScript = `
+# bootc test welcome message
+if [ -z "$BOOTC_WELCOME_SHOWN" ]; then
+  export BOOTC_WELCOME_SHOWN=1
+  echo ""
+  echo "  ___________"
+  echo " /          /|"
+  echo "|   (ᵔᴥᵔ)  | |"
+  echo "|   bootc  | |"
+  echo "|__________|/"
+  echo ""
+  echo "=== bootc Test Container ==="
+  echo "Mode: ${modeLabel}"
+  echo "Image: ${image}"
+  echo ""
+  echo "${modeDescription}"
+  echo ""
+  echo "For full VM experience, build a disk image or use bcvk ephemeral VM."
+  echo ""
+fi
+`;
+
+    try {
+      await podmanDesktopApi.process.exec('podman', [
+        'exec',
+        containerName,
+        'bash',
+        '-c',
+        `cat >> /root/.bashrc << 'BOOTC_WELCOME'
+${welcomeScript}
+BOOTC_WELCOME`,
+      ]);
+    } catch (err) {
+      console.warn('Failed to setup welcome message in container:', err);
+      // Non-fatal - container still works without welcome message
+    }
+  }
+
+  // This allows users to quickly test their bootc image without building a full disk image
+  // Mode can be 'bash' (simple shell) or 'systemd' (privileged with /sbin/init)
+  async testBootcImage(image: string, engineId: string, mode: 'bash' | 'systemd' = 'bash'): Promise<void> {
+    // Generate a unique container name based on the image name
+    const imageName = image.split('/').pop()?.split(':')[0] ?? 'bootc';
+    const containerName = `bootc-test-${imageName}-${Date.now()}`;
+
+    try {
+      let options: podmanDesktopApi.ContainerCreateOptions;
+
+      if (mode === 'systemd') {
+        options = {
+          name: containerName,
+          Image: image,
+          Tty: true,
+          OpenStdin: true,
+          Cmd: ['/sbin/init'],
+          HostConfig: {
+            Privileged: true,
+            Binds: ['/sys:/sys:ro'],
+          },
+        };
+      } else {
+        options = {
+          name: containerName,
+          Image: image,
+          Tty: true,
+          OpenStdin: true,
+          Cmd: ['/bin/bash'],
+        };
+      }
+
+      const result = await podmanDesktopApi.containerEngine.createContainer(engineId, options);
+
+      // Wait for container to be running before navigating to terminal
+      await this.waitForContainerRunning(result.id);
+
+      // Setup welcome message in container
+      await this.setupTestWelcomeMessage(containerName, image, mode);
+
+      // Add a delay to allow UI to fully initialize before navigation
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Navigate to the container terminal in Podman Desktop
+      await podmanDesktopApi.navigation.navigateToContainerTerminal(result.id);
+
+      this.telemetryLogger.logUsage('testBootcImage', { mode });
+    } catch (err) {
+      await podmanDesktopApi.window.showErrorMessage(`Error testing bootc image: ${err}`);
+      console.error('Error testing bootc image: ', err);
+      throw err;
+    }
+  }
+
+  // Wait for a container to be in running state
+  private async waitForContainerRunning(containerId: string, timeoutMs: number = 30000): Promise<void> {
+    const startTime = Date.now();
+    const pollInterval = 500; // Check every 500ms
+
+    while (Date.now() - startTime < timeoutMs) {
+      const containers = await podmanDesktopApi.containerEngine.listContainers();
+      const container = containers.find(c => c.Id === containerId);
+
+      if (container?.State === 'running') {
+        return;
+      }
+
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+    }
+
+    throw new Error('Timeout waiting for container to start');
+  }
+
   // The API does not allow callbacks through the RPC, so instead
   // we send "notify" messages to the frontend to trigger a refresh
   // this method is internal and meant to be used by the API implementation

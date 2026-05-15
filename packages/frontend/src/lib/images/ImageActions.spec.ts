@@ -23,7 +23,7 @@ import { expect, test, vi } from 'vitest';
 import type { ImageInfoUI } from './ImageInfoUI';
 import ImageActions from './ImageActions.svelte';
 import userEvent from '@testing-library/user-event';
-import { gotoDiskImageBuild } from '../navigation';
+import { gotoTestImage } from '../navigation';
 import type { Subscriber } from '/@shared/src/messages/MessageProxy';
 import { bootcClient } from '/@/api/client';
 
@@ -44,24 +44,26 @@ vi.mock('/@/api/client', async () => {
 
 vi.mock('../navigation', async () => {
   return {
-    gotoDiskImageBuild: vi.fn(),
+    gotoTestImage: vi.fn(),
   };
 });
 
-test('Expect Build action works', async () => {
+test('Expect Run Image action works', async () => {
   const image: ImageInfoUI = {
     name: 'dummy',
+    tag: 'latest',
+    engineId: 'podman',
     status: 'unused',
   } as ImageInfoUI;
 
   render(ImageActions, { object: image });
 
-  const build = screen.getByTitle('Build Disk Image');
-  expect(build).toBeDefined();
+  const run = screen.getByTitle('Run Image');
+  expect(run).toBeDefined();
 
-  await userEvent.click(build);
+  await userEvent.click(run);
 
-  expect(gotoDiskImageBuild).toHaveBeenCalled();
+  expect(gotoTestImage).toHaveBeenCalledWith('dummy', 'latest', 'podman');
 });
 
 test('Expect Delete action works', async () => {

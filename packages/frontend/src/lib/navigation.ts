@@ -22,6 +22,10 @@ export function goToDiskImages(): void {
   router.goto('/disk-images');
 }
 
+export function goToImages(): void {
+  router.goto('images');
+}
+
 export async function gotoBuild(): Promise<void> {
   await bootcClient.telemetryLogUsage('nav-build');
   router.goto('/disk-images/build');
@@ -50,4 +54,11 @@ export async function gotoCreateVMForm(): Promise<void> {
 export async function gotoCreateVM(image: string, path: string): Promise<void> {
   await bootcClient.telemetryLogUsage('nav-create-vm');
   router.goto(`/disk-images/createVM/${btoa(image)}/${btoa(path)}`);
+}
+
+export async function gotoTestImage(imageName: string, imageTag: string, engineId: string): Promise<void> {
+  await bootcClient.telemetryLogUsage('nav-test-image');
+  router.goto(
+    `/images/test/${encodeURIComponent(imageName)}/${encodeURIComponent(imageTag)}/${encodeURIComponent(engineId)}`,
+  );
 }
