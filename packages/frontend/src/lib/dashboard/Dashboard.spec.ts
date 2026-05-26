@@ -76,7 +76,7 @@ test('Expect resource sections', async () => {
   vi.mocked(bootcClient.listBootcImages).mockResolvedValue(mockBootcImages);
   render(Dashboard);
 
-  const images = screen.getByText('Bootc Images');
+  const images = screen.getByText('BootC Container Images');
   expect(images).toBeInTheDocument();
 
   const diskImages = screen.getByText('Disk Images');
